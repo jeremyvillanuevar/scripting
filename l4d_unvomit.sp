@@ -1,24 +1,4 @@
-/*
-*	UnVomit - Remove Boomer Screen Effect
-*	Copyright (C) 2021 Silvers
-*
-*	This program is free software: you can redistribute it and/or modify
-*	it under the terms of the GNU General Public License as published by
-*	the Free Software Foundation, either version 3 of the License, or
-*	(at your option) any later version.
-*
-*	This program is distributed in the hope that it will be useful,
-*	but WITHOUT ANY WARRANTY; without even the implied warranty of
-*	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*	GNU General Public License for more details.
-*
-*	You should have received a copy of the GNU General Public License
-*	along with this program.  If not, see <https://www.gnu.org/licenses/>.
-*/
-
-
-
-#define PLUGIN_VERSION 		"1.3"
+#define PLUGIN_VERSION 		"1.2"
 
 /*======================================================================================
 	Plugin Info:
@@ -30,9 +10,6 @@
 
 ========================================================================================
 	Change Log:
-
-1.3 (15-Feb-2021)
-	- Fixed the invalid entity error. Thanks to "Dragokas" for reporting.
 
 1.2 (01-Apr-2020)
 	- Fixed incorrect L4D1 Linux signature. Thanks to "Dragokas" for reporting.
@@ -428,7 +405,7 @@ public Action Event_IsIt(Event event, const char[] name, bool dontBroadcast)
 public Action TimerUnvomit(Handle timer, any userid)
 {
 	int client = GetClientOfUserId(userid);
-	if( client && IsClientInGame(client) )
+	if( IsValidClient(client)  )
 	{
 		// Glow
 		if( g_iCurrentMode == 4 ? g_iCvarGlowV : g_iCvarGlowC )
@@ -453,4 +430,31 @@ public Action TimerUnvomit(Handle timer, any userid)
 		event.SetInt("userid", userid);
 		event.Fire(false);
 	}
+}
+
+
+public bool IsValidClient(int client)
+{
+	if (client <= 0)
+		return false;
+	
+	if (client > MaxClients)
+		return false;
+
+	if (!IsClientConnected(client))
+		return false;
+	
+	//if (IsFakeClient(client))
+		//return false;
+	
+	if (!IsClientInGame(client))
+		return false;
+	
+	if (!IsPlayerAlive(client))
+		return false;
+
+	if (!IsValidEntity(client))
+		return false;
+
+	return true;
 }
