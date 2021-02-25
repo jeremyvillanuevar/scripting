@@ -190,6 +190,9 @@ public void OnPluginStart()
 	g_hCvarWarnLead.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarWarnTime.AddChangeHook(ConVarChanged_Cvars);
 
+	HookEvent("player_bot_replace", player_bot_replace );	
+	HookEvent("bot_player_replace", bot_player_replace );	
+
 	#if DEBUG_BENCHMARK
 	g_Prof = CreateProfiler();
 	#endif
@@ -406,6 +409,36 @@ public Action Event_PlayerTeam(Event event, const char[] name, bool dontBroadcas
 	if( client )
 	{
 		ResetClient(client);
+	}
+}
+
+
+//Fires when a bot is attempting to replace a player.
+public void player_bot_replace(Event Spawn_Event, const char[] Spawn_Name, bool Spawn_Broadcast)
+{
+	int client = GetClientOfUserId(Spawn_Event.GetInt("player"));
+	int bot = GetClientOfUserId(Spawn_Event.GetInt("bot"));
+	teleportbotahead(bot);
+}
+//Fires when a player is attempting to replace a bot.
+public void bot_player_replace(Event Spawn_Event, const char[] Spawn_Name, bool Spawn_Broadcast)
+{
+	int client = GetClientOfUserId(Spawn_Event.GetInt("player"));
+	int bot = GetClientOfUserId(Spawn_Event.GetInt("bot"));
+	teleportbotahead(client);
+	//PrintToChatAll("bot_player_replace %N  place %N", client, bot);
+}
+
+
+void teleportbotahead(int client)
+{
+	//check if there are any alive survivor in server
+	int iAliveSurvivor = GetAheadClient();//GetRandomClient();
+	if(iAliveSurvivor != 0)
+	{
+		float vPos[3];
+		GetClientAbsOrigin(iAliveSurvivor, vPos);		
+		TeleportEntity(client, vPos, NULL_VECTOR, NULL_VECTOR);
 	}
 }
 
@@ -824,4 +857,48 @@ stock void ReplaceColor(char[] message, int maxLen)
     ReplaceString(message, maxLen, "{cyan}", "\x03", false);
     ReplaceString(message, maxLen, "{orange}", "\x04", false);
     ReplaceString(message, maxLen, "{green}", "\x05", false);
+}
+
+
+int GetAheadClient()
+{	
+	float flow;
+	int count, countflow, index;
+	// Get survivors flow distance
+	ArrayList aList = new ArrayList(2);
+	// Account for incapped
+	int clients[MAXPLAYERS+1];
+	int client=0;
+	countflow=0;
+	// Check valid survivors, count incapped
+	for( int i = 1; i <= MaxClients; i++ )
+	{
+		if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
+		{
+			clients[count++] = i;
+		}
+	}
+
+	for( int i = 0; i < count; i++ )
+	{
+		client = clients[i];
+		// Ignore bot
+		if(IsFakeClient(client))
+			continue;
+		flow = L4D2Direct_GetFlowDistance(client);
+		if( flow && flow != -9999.0 ) // Invalid flows
+		{
+			countflow++;
+			index = aList.Push(flow);
+			aList.Set(index, client, 1);
+		}
+	}
+	// Incase not enough players or some have invalid flow distance, we still need an average.
+	if( countflow >= 1 )
+	{
+		aList.Sort(Sort_Descending, Sort_Float);
+		client = aList.Get(0, 1);
+	}
+	delete aList;
+	return client;
 }
