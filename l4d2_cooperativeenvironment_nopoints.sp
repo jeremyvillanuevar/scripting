@@ -2,7 +2,7 @@
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
-#define PLUGIN_VERSION						  "1.0.3"
+#define PLUGIN_VERSION						  "1.0.5"
 //1.0.0 - Release
 //1.0.1 - Added OnTakeDamage timer / stop debugging
 //1.0.2 - Bugfixes
