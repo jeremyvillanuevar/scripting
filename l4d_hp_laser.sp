@@ -2,6 +2,25 @@
 // ====================================================================================================
 Change Log:
 
+1.0.7 (23-February-2021)
+    - Fixed laser beam hiding behind witches and infecteds.
+    - Code optimization.
+
+1.0.6 (22-February-2021)
+    - Added cvar to change the gradient color to default game colors on survivors. (Green 40HP+, Yellow 39HP~25HP, Red 24HP-)
+    - Added menu and commands to hide/show the laser beam. (thanks "LexNBR" for requesting)
+    - Changed laser beam angles.
+
+1.0.5 (18-February-2021)
+    - Fixed a bug not resizing the laser size on alpha multiply (thanks "3aljiyavslgazana" for reporting)
+    - Added cvar to set the minimum alpha that a client must be to hide the laser beam.
+
+1.0.4 (18-February-2021)
+    - Added cvar to multiply the laser beam alpha based on client render alpha. (thanks "3aljiyavslgazana" for requesting)
+
+1.0.3 (16-February-2021)
+    - Added attack delay visibility cvar for survivors.
+
 1.0.2 (12-February-2021)
     - Fixed L4D1 compatibility. (thanks "HarryPotter" for reporting)
     - Added cvar to run by frame instead by timer. (thanks "RA" for requesting)
@@ -24,7 +43,7 @@ Change Log:
 #define PLUGIN_NAME                   "[L4D1 & L4D2] HP Laser"
 #define PLUGIN_AUTHOR                 "Mart"
 #define PLUGIN_DESCRIPTION            "Shows a laser beam at the client head based on its HP"
-#define PLUGIN_VERSION                "1.0.1"
+#define PLUGIN_VERSION                "1.0.7"
 #define PLUGIN_URL                    "https://forums.alliedmods.net/showthread.php?t=330590"
 
 // ====================================================================================================
@@ -45,6 +64,7 @@ public Plugin myinfo =
 #include <sourcemod>
 #include <sdktools>
 #include <sdkhooks>
+#include <clientprefs>
 
 // ====================================================================================================
 // Pragmas
@@ -67,6 +87,8 @@ public Plugin myinfo =
 // Defines
 // ====================================================================================================
 #define CLASSNAME_TANK_ROCK           "tank_rock"
+#define CLASSNAME_INFECTED            "infected"
+#define CLASSNAME_WITCH               "witch"
 
 #define TEAM_SPECTATOR                1
 #define TEAM_SURVIVOR                 2
@@ -109,34 +131,42 @@ public Plugin myinfo =
 
 #define MAXENTITIES                   2048
 
+#define LOW_HEALTH                    24
+
 // ====================================================================================================
 // Native Cvars
 // ====================================================================================================
 static ConVar g_hCvar_survivor_incap_health;
 static ConVar g_hCvar_survivor_max_incapacitated_count;
 static ConVar g_hCvar_pain_pills_decay_rate;
+static ConVar g_hCvar_survivor_limp_health;
 
 // ====================================================================================================
 // Plugin Cvars
 // ====================================================================================================
 static ConVar g_hCvar_Enabled;
+static ConVar g_hCvar_Cookies;
 static ConVar g_hCvar_ZAxis;
 static ConVar g_hCvar_FadeDistance;
 static ConVar g_hCvar_Sight;
+static ConVar g_hCvar_AttackDelay;
+static ConVar g_hCvar_GradientColor;
 static ConVar g_hCvar_Model;
 static ConVar g_hCvar_Alpha;
 static ConVar g_hCvar_Height;
-static ConVar g_hCvar_BlackAndWhite;
 static ConVar g_hCvar_Fill;
 static ConVar g_hCvar_FillAlpha;
 static ConVar g_hCvar_Outline;
 static ConVar g_hCvar_OutlineHeight;
 static ConVar g_hCvar_RenderFrame;
 static ConVar g_hCvar_SkipFrame;
+static ConVar g_hCvar_BlackAndWhite;
 static ConVar g_hCvar_Team;
 static ConVar g_hCvar_SurvivorTeam;
 static ConVar g_hCvar_InfectedTeam;
 static ConVar g_hCvar_SpectatorTeam;
+static ConVar g_hCvar_MultiplyAlphaTeam;
+static ConVar g_hCvar_ClientAlphaMax;
 static ConVar g_hCvar_SurvivorWidth;
 static ConVar g_hCvar_InfectedWidth;
 static ConVar g_hCvar_SI;
@@ -146,15 +176,20 @@ static ConVar g_hCvar_SI;
 // ====================================================================================================
 static bool   g_bL4D2;
 static bool   g_bConfigLoaded;
+static bool   g_bEventsHooked;
 static bool   g_bCvar_survivor_max_incapacitated_count;
 static bool   g_bCvar_Enabled;
+static bool   g_bCvar_Cookies;
 static bool   g_bCvar_FadeDistance;
 static bool   g_bCvar_Sight;
-static bool   g_bCvar_BlackAndWhite;
+static bool   g_bCvar_AttackDelay;
+static bool   g_bCvar_GradientColor;
 static bool   g_bCvar_Fill;
 static bool   g_bCvar_Outline;
 static bool   g_bCvar_RenderFrame;
 static bool   g_bCvar_SkipFrame;
+static bool   g_bCvar_BlackAndWhite;
+static bool   g_bCvar_ClientAlphaMax;
 
 // ====================================================================================================
 // int - Plugin Variables
@@ -163,24 +198,28 @@ static int    g_iModelBeam;
 static int    g_iFrameCount;
 static int    g_iCvar_survivor_incap_health;
 static int    g_iCvar_survivor_max_incapacitated_count;
+static int    g_iCvar_survivor_limp_health;
 static int    g_iCvar_Alpha;
 static int    g_iCvar_FillAlpha;
+static int    g_iCvar_SkipFrame;
 static int    g_iCvar_Team;
 static int    g_iCvar_SurvivorTeam;
 static int    g_iCvar_InfectedTeam;
 static int    g_iCvar_SpectatorTeam;
+static int    g_iCvar_MultiplyAlphaTeam;
+static int    g_iCvar_ClientAlphaMax;
 static int    g_iCvar_SI;
-static int    g_iCvar_SkipFrame;
 
 // ====================================================================================================
 // float - Plugin Variables
 // ====================================================================================================
-static float  g_fVPlayerMins[3] = {-16.0, -16.0,  0.0};
-static float  g_fVPlayerMaxs[3] = { 16.0,  16.0, 71.0};
+static float  g_fvPlayerMins[3] = {-16.0, -16.0,  0.0};
+static float  g_fvPlayerMaxs[3] = { 16.0,  16.0, 71.0};
 static float  g_fBeamLife;
 static float  g_fCvar_pain_pills_decay_rate;
 static float  g_fCvar_ZAxis;
 static float  g_fCvar_FadeDistance;
+static float  g_fCvar_AttackDelay;
 static float  g_fCvar_Height;
 static float  g_fCvar_OutlineHeight;
 static float  g_fCvar_SurvivorWidth;
@@ -194,12 +233,20 @@ static char   g_sCvar_Model[100];
 // ====================================================================================================
 // client - Plugin Variables
 // ====================================================================================================
+static bool   gc_bDisable[MAXPLAYERS+1];
+static bool   gc_bShouldRender[MAXPLAYERS+1];
 static bool   gc_bVisible[MAXPLAYERS+1][MAXPLAYERS+1];
+static float  gc_fLastAttack[MAXPLAYERS+1][MAXPLAYERS+1];
 
 // ====================================================================================================
 // entity - Plugin Variables
 // ====================================================================================================
 static bool   ge_bInvalidTrace[MAXENTITIES+1];
+
+// ====================================================================================================
+// Cookies - Plugin Variables
+// ====================================================================================================
+static Cookie g_cbDisable;
 
 // ====================================================================================================
 // Plugin Start
@@ -227,55 +274,67 @@ public void OnPluginStart()
     g_hCvar_survivor_incap_health = FindConVar("survivor_incap_health");
     g_hCvar_survivor_max_incapacitated_count = FindConVar("survivor_max_incapacitated_count");
     g_hCvar_pain_pills_decay_rate = FindConVar("pain_pills_decay_rate");
+    g_hCvar_survivor_limp_health = FindConVar("survivor_limp_health");
 
     CreateConVar("l4d_hp_laser_version", PLUGIN_VERSION, PLUGIN_DESCRIPTION, CVAR_FLAGS_PLUGIN_VERSION);
-    g_hCvar_Enabled       = CreateConVar("l4d_hp_laser_enable", "1", "Enable/Disable the plugin.\n0 = Disable, 1 = Enable.", CVAR_FLAGS, true, 0.0, true, 1.0);
-    g_hCvar_ZAxis         = CreateConVar("l4d_hp_laser_z_axis", "85", "Additional Z distance based on client position.", CVAR_FLAGS, true, 0.0);
-    g_hCvar_FadeDistance  = CreateConVar("l4d_hp_laser_fade_distance", "0", "Minimum distance that a client must be from another client to see the laser beam HP.\n0 = Always visible.", CVAR_FLAGS, true, 0.0);
-    g_hCvar_Sight         = CreateConVar("l4d_hp_laser_sight", "1", "Show a laser beam HP to the survivor only if the infected is on sight.\n0 = OFF, 1 = ON.", CVAR_FLAGS, true, 0.0, true, 1.0);
-    g_hCvar_Model         = CreateConVar("l4d_hp_laser_model", "materials/vgui/white_additive.vmt", "Model of the laser beam HP.");
-    g_hCvar_Alpha         = CreateConVar("l4d_hp_laser_alpha", "240", "Alpha of the laser beam HP.\n0 = Invisible, 255 = Fully Visible", CVAR_FLAGS, true, 0.0, true, 255.0);
-    g_hCvar_Height        = CreateConVar("l4d_hp_laser_height", "1.0", "Height of the laser beam HP.", CVAR_FLAGS, true, 0.0);
-    g_hCvar_BlackAndWhite = CreateConVar("l4d_hp_laser_black_and_white", "1", "Show a white laser beam HP on \"black and white\" survivors.\n0 = OFF, 1 = ON.", CVAR_FLAGS, true, 0.0, true, 1.0);
-    g_hCvar_Fill          = CreateConVar("l4d_hp_laser_fill", "1", "Display a laser beam HP to fill the bar.\nNote: Disable this if you intend to show a lot of laser beams HP. The game limits the number of beams rendered at the same time when limit exceeds it may not draw then all.\n0 = OFF, 1 = ON.", CVAR_FLAGS, true, 0.0, true, 1.0);
-    g_hCvar_FillAlpha     = CreateConVar("l4d_hp_laser_fill_alpha", g_bL4D2 ? "75" : "50", "Alpha of the laser beam HP that fills the bar.\n0 = Invisible, 255 = Fully Visible", CVAR_FLAGS, true, 0.0, true, 255.0);
-    g_hCvar_Outline       = CreateConVar("l4d_hp_laser_outline", "0", "Show an outline (add 4 lasers) around the laser beam HP.\nNote: Disable this if you intend to show a lot of laser beams HP. The game limits the number of beams rendered at the same time when limit exceeds it may not draw then al.\n0 = OFF, 1 = ON.", CVAR_FLAGS, true, 0.0, true, 1.0);
-    g_hCvar_OutlineHeight = CreateConVar("l4d_hp_laser_outline_height", g_bL4D2 ? "0.07" : "0.13", "Outline height of the laser beam.\nNote: Less than 0.07 may no render in L4D2 and less than 0.13 may no render in L4D1.", CVAR_FLAGS, true, 0.0);
-    g_hCvar_RenderFrame   = CreateConVar("l4d_hp_laser_render_frame", "0", "Render type used to draw the laser beams.\n0 = Timer (0.1 seconds - less expensive), 1 = OnGameFrame (by frame - more expensive).", CVAR_FLAGS, true, 0.0, true, 1.0);
-    g_hCvar_SkipFrame     = CreateConVar("l4d_hp_laser_skip_frame", "1", "How many frames should skip while using l4d_hp_laser_render_type = \"1\" (OnGameFrame). Frames may vary depending on your tickrate. Using a higher value than 2 becomes slower than with the timer on default tick rate (30)", CVAR_FLAGS, true, 0.0);
-    g_hCvar_Team          = CreateConVar("l4d_hp_laser_team", "3", "Which teams should have a laser beam HP sprite.\n0 = NONE, 1 = SURVIVOR, 2 = INFECTED, 4 = SPECTATOR, 8 = HOLDOUT.\nAdd numbers greater than 0 for multiple options.\nExample: \"3\", enables for SURVIVOR and INFECTED.", CVAR_FLAGS, true, 0.0, true, 15.0);
-    g_hCvar_SurvivorTeam  = CreateConVar("l4d_hp_laser_survivor_team", "3", "Which teams survivors can see a laser beam HP sprite.\n0 = NONE, 1 = SURVIVOR, 2 = INFECTED, 4 = SPECTATOR, 8 = HOLDOUT.\nAdd numbers greater than 0 for multiple options.\nExample: \"3\", enables for SURVIVOR and INFECTED.", CVAR_FLAGS, true, 0.0, true, 15.0);
-    g_hCvar_InfectedTeam  = CreateConVar("l4d_hp_laser_infected_team", "3", "Which teams infected can see a laser beam HP sprite.\n0 = NONE, 1 = SURVIVOR, 2 = INFECTED, 4 = SPECTATOR, 8 = HOLDOUT.\nAdd numbers greater than 0 for multiple options.\nExample: \"3\", enables for SURVIVOR and INFECTED.", CVAR_FLAGS, true, 0.0, true, 15.0);
-    g_hCvar_SpectatorTeam = CreateConVar("l4d_hp_laser_spectator_team", "3", "Which teams spectators can see a laser beam HP sprite.\n0 = NONE, 1 = SURVIVOR, 2 = INFECTED, 4 = SPECTATOR, 8 = HOLDOUT.\nAdd numbers greater than 0 for multiple options.\nExample: \"3\", enables for SURVIVOR and INFECTED.", CVAR_FLAGS, true, 0.0, true, 15.0);
-    g_hCvar_SurvivorWidth = CreateConVar("l4d_hp_laser_survivor_width", "15.0", "Width of the survivor laser beam HP.", CVAR_FLAGS, true, 0.0);
-    g_hCvar_InfectedWidth = CreateConVar("l4d_hp_laser_infected_width", "30.0", "Width of the infected laser beam HP.", CVAR_FLAGS, true, 0.0);
+    g_hCvar_Enabled           = CreateConVar("l4d_hp_laser_enable", "1", "Enable/Disable the plugin.\n0 = Disable, 1 = Enable.", CVAR_FLAGS, true, 0.0, true, 1.0);
+    g_hCvar_Cookies           = CreateConVar("l4d_hp_laser_cookies", "1", "Allow cookies for storing client preferences.\n0 = OFF, 1 = ON.", CVAR_FLAGS, true, 0.0, true, 1.0);
+    g_hCvar_ZAxis             = CreateConVar("l4d_hp_laser_z_axis", "85", "Additional Z axis distance of laser beam HP based on client position.", CVAR_FLAGS, true, 0.0);
+    g_hCvar_FadeDistance      = CreateConVar("l4d_hp_laser_fade_distance", "0", "Minimum distance that a client must be from another client to see the laser beam HP.\n0 = Always visible.", CVAR_FLAGS, true, 0.0);
+    g_hCvar_Sight             = CreateConVar("l4d_hp_laser_sight", "1", "Show a laser beam HP to the survivor only if the special infected is on sight.\n0 = OFF, 1 = ON.", CVAR_FLAGS, true, 0.0, true, 1.0);
+    g_hCvar_AttackDelay       = CreateConVar("l4d_hp_laser_attack_delay", "0.0", "Show the laser beam HP to the survivor attacker, by this amount of time in seconds, after hitting a special infected.\n0 = OFF.", CVAR_FLAGS, true, 0.0);
+    g_hCvar_GradientColor     = CreateConVar("l4d_hp_laser_gradient_color", "0", "Should the laser beam HP on survivors render in gradient color. \n0 = OFF. (Game colors: Green 40HP+, Yellow 39HP~25HP, Red 24HP-), 1 = Gradient Mode.\nNote: The yellow color is defined by the \"survivor_limp_health\" game cvar.", CVAR_FLAGS, true, 0.0, true, 1.0);
+    g_hCvar_Model             = CreateConVar("l4d_hp_laser_model", "materials/vgui/white_additive.vmt", "Model of the laser beam HP.");
+    g_hCvar_Alpha             = CreateConVar("l4d_hp_laser_alpha", "240", "Alpha of the laser beam HP.\n0 = Invisible, 255 = Fully Visible", CVAR_FLAGS, true, 0.0, true, 255.0);
+    g_hCvar_Height            = CreateConVar("l4d_hp_laser_height", "1.0", "Height of the laser beam HP.", CVAR_FLAGS, true, 0.0);
+    g_hCvar_Fill              = CreateConVar("l4d_hp_laser_fill", "1", "Display a laser beam HP to fill the bar.\nNote: Disable this if you intend to show a lot of laser beams HP. The game limits the number of beams rendered at the same time when limit exceeds it may not draw then all.\n0 = OFF, 1 = ON.", CVAR_FLAGS, true, 0.0, true, 1.0);
+    g_hCvar_FillAlpha         = CreateConVar("l4d_hp_laser_fill_alpha", "40", "Alpha of the laser beam HP that fills the bar.\n0 = Invisible, 255 = Fully Visible", CVAR_FLAGS, true, 0.0, true, 255.0);
+    g_hCvar_Outline           = CreateConVar("l4d_hp_laser_outline", "0", "Show an outline (add 4 lasers) around the laser beam HP.\nNote: Disable this if you intend to show a lot of laser beams HP. The game limits the number of beams rendered at the same time when limit exceeds it may not draw then al.\n0 = OFF, 1 = ON.", CVAR_FLAGS, true, 0.0, true, 1.0);
+    g_hCvar_OutlineHeight     = CreateConVar("l4d_hp_laser_outline_height", g_bL4D2 ? "0.07" : "0.13", "Outline height of the laser beam HP.\nNote: Less than 0.07 may no render in L4D2 and less than 0.13 may no render in L4D1.", CVAR_FLAGS, true, 0.0);
+    g_hCvar_RenderFrame       = CreateConVar("l4d_hp_laser_render_frame", "0", "Render type used to draw the laser beams.\n0 = Timer (0.1 seconds - less expensive), 1 = OnGameFrame (by frame - more expensive).", CVAR_FLAGS, true, 0.0, true, 1.0);
+    g_hCvar_SkipFrame         = CreateConVar("l4d_hp_laser_skip_frame", "1", "How many frames should skip while using l4d_hp_laser_render_type = \"1\" (OnGameFrame). Frames may vary depending on your tickrate. Using a higher value than 2 becomes slower than with the timer on default tick rate (30)", CVAR_FLAGS, true, 0.0);
+    g_hCvar_BlackAndWhite     = CreateConVar("l4d_hp_laser_black_and_white", "1", "Show a laser beam HP in white on \"black and white\" survivors.\n0 = OFF, 1 = ON.", CVAR_FLAGS, true, 0.0, true, 1.0);
+    g_hCvar_Team              = CreateConVar("l4d_hp_laser_team", "3", "Which teams should have a laser beam HP.\n0 = NONE, 1 = SURVIVOR, 2 = INFECTED, 4 = SPECTATOR, 8 = HOLDOUT.\nAdd numbers greater than 0 for multiple options.\nExample: \"3\", enables for SURVIVOR and INFECTED.", CVAR_FLAGS, true, 0.0, true, 15.0);
+    g_hCvar_SurvivorTeam      = CreateConVar("l4d_hp_laser_survivor_team", "3", "Which teams survivors can see a laser beam HP.\n0 = NONE, 1 = SURVIVOR, 2 = INFECTED, 4 = SPECTATOR, 8 = HOLDOUT.\nAdd numbers greater than 0 for multiple options.\nExample: \"3\", enables for SURVIVOR and INFECTED.", CVAR_FLAGS, true, 0.0, true, 15.0);
+    g_hCvar_InfectedTeam      = CreateConVar("l4d_hp_laser_infected_team", "3", "Which teams infected can see a laser beam HP.\n0 = NONE, 1 = SURVIVOR, 2 = INFECTED, 4 = SPECTATOR, 8 = HOLDOUT.\nAdd numbers greater than 0 for multiple options.\nExample: \"3\", enables for SURVIVOR and INFECTED.", CVAR_FLAGS, true, 0.0, true, 15.0);
+    g_hCvar_SpectatorTeam     = CreateConVar("l4d_hp_laser_spectator_team", "3", "Which teams spectators can see a laser beam HP.\n0 = NONE, 1 = SURVIVOR, 2 = INFECTED, 4 = SPECTATOR, 8 = HOLDOUT.\nAdd numbers greater than 0 for multiple options.\nExample: \"3\", enables for SURVIVOR and INFECTED.", CVAR_FLAGS, true, 0.0, true, 15.0);
+    g_hCvar_MultiplyAlphaTeam = CreateConVar("l4d_hp_laser_multiply_alpha_team", "2", "Which teams should multiply the laser beam HP alpha based on the client render alpha.\n0 = NONE, 1 = SURVIVOR, 2 = INFECTED, 4 = SPECTATOR, 8 = HOLDOUT.\nAdd numbers greater than 0 for multiple options.\nExample: \"3\", enables for SURVIVOR and INFECTED.", CVAR_FLAGS, true, 0.0, true, 15.0);
+    g_hCvar_ClientAlphaMax    = CreateConVar("l4d_hp_laser_client_alpha_max", "0", "Maximum render alpha that a client must be to hide the laser beam HP.\nUseful to hide it on invisible/transparent clients.\n-1 = OFF.", CVAR_FLAGS, true, -1.0, true, 255.0);
+    g_hCvar_SurvivorWidth     = CreateConVar("l4d_hp_laser_survivor_width", "15.0", "Width of the survivor laser beam HP.", CVAR_FLAGS, true, 0.0);
+    g_hCvar_InfectedWidth     = CreateConVar("l4d_hp_laser_infected_width", "30.0", "Width of the infected laser beam HP.", CVAR_FLAGS, true, 0.0);
 
     if (g_bL4D2)
-        g_hCvar_SI        = CreateConVar("l4d_hp_laser_si", "64", "Which Specials should have a laser beam HP.\n1=SMOKER, 2 = BOOMER, 4 = HUNTER, 8 = SPITTER, 16 = JOCKEY, 32 = CHARGER, 64 = TANK.\nAdd numbers greater than 0 for multiple options.\nExample: \"127\", enables laser beam HP for all SI.", CVAR_FLAGS, true, 0.0, true, 127.0);
+        g_hCvar_SI        = CreateConVar("l4d_hp_laser_si", "64", "Which special infected should have a laser beam HP.\n1=SMOKER, 2 = BOOMER, 4 = HUNTER, 8 = SPITTER, 16 = JOCKEY, 32 = CHARGER, 64 = TANK.\nAdd numbers greater than 0 for multiple options.\nExample: \"127\", enables laser beam HP for all SI.", CVAR_FLAGS, true, 0.0, true, 127.0);
     else
-        g_hCvar_SI        = CreateConVar("l4d_hp_laser_si", "8", "Which Specials should have a laser beam HP.\n1 = SMOKER, 2  =  BOOMER, 4 = HUNTER, 8 = TANK.\nAdd numbers greater than 0 for multiple options.\nExample: \"15\", enables laser beam HP for all SI.", CVAR_FLAGS, true, 0.0, true, 15.0);
+        g_hCvar_SI        = CreateConVar("l4d_hp_laser_si", "8", "Which special infected should have a laser beam HP.\n1 = SMOKER, 2  =  BOOMER, 4 = HUNTER, 8 = TANK.\nAdd numbers greater than 0 for multiple options.\nExample: \"15\", enables laser beam HP for all SI.", CVAR_FLAGS, true, 0.0, true, 15.0);
 
     g_hCvar_survivor_incap_health.AddChangeHook(Event_ConVarChanged);
     g_hCvar_survivor_max_incapacitated_count.AddChangeHook(Event_ConVarChanged);
     g_hCvar_pain_pills_decay_rate.AddChangeHook(Event_ConVarChanged);
+    g_hCvar_survivor_limp_health.AddChangeHook(Event_ConVarChanged);
     g_hCvar_Enabled.AddChangeHook(Event_ConVarChanged);
+    g_hCvar_Cookies.AddChangeHook(Event_ConVarChanged);
     g_hCvar_ZAxis.AddChangeHook(Event_ConVarChanged);
     g_hCvar_FadeDistance.AddChangeHook(Event_ConVarChanged);
     g_hCvar_Sight.AddChangeHook(Event_ConVarChanged);
+    g_hCvar_AttackDelay.AddChangeHook(Event_ConVarChanged);
+    g_hCvar_GradientColor.AddChangeHook(Event_ConVarChanged);
     g_hCvar_Model.AddChangeHook(Event_ConVarChanged);
     g_hCvar_Alpha.AddChangeHook(Event_ConVarChanged);
     g_hCvar_Height.AddChangeHook(Event_ConVarChanged);
-    g_hCvar_BlackAndWhite.AddChangeHook(Event_ConVarChanged);
     g_hCvar_Fill.AddChangeHook(Event_ConVarChanged);
     g_hCvar_FillAlpha.AddChangeHook(Event_ConVarChanged);
     g_hCvar_Outline.AddChangeHook(Event_ConVarChanged);
     g_hCvar_OutlineHeight.AddChangeHook(Event_ConVarChanged);
     g_hCvar_RenderFrame.AddChangeHook(Event_ConVarChanged);
     g_hCvar_SkipFrame.AddChangeHook(Event_ConVarChanged);
+    g_hCvar_BlackAndWhite.AddChangeHook(Event_ConVarChanged);
     g_hCvar_Team.AddChangeHook(Event_ConVarChanged);
     g_hCvar_SurvivorTeam.AddChangeHook(Event_ConVarChanged);
     g_hCvar_InfectedTeam.AddChangeHook(Event_ConVarChanged);
     g_hCvar_SpectatorTeam.AddChangeHook(Event_ConVarChanged);
+    g_hCvar_MultiplyAlphaTeam.AddChangeHook(Event_ConVarChanged);
+    g_hCvar_ClientAlphaMax.AddChangeHook(Event_ConVarChanged);
     g_hCvar_SurvivorWidth.AddChangeHook(Event_ConVarChanged);
     g_hCvar_InfectedWidth.AddChangeHook(Event_ConVarChanged);
     g_hCvar_SI.AddChangeHook(Event_ConVarChanged);
@@ -283,10 +342,17 @@ public void OnPluginStart()
     // Load plugin configs from .cfg
     AutoExecConfig(true, CONFIG_FILENAME);
 
+    // Cookies
+    g_cbDisable = new Cookie("l4d_hp_laser_disable", "HP Laser - Disable laser beam HP", CookieAccess_Protected);
+
+    // Public Commands
+    RegConsoleCmd("sm_hplaser", CmdHpMenu, "Open a menu to toogle the laser beam HP for the client.");
+    RegConsoleCmd("sm_hidehplaser", CmdHideHp, "Disable laser beam HP for the client.");
+    RegConsoleCmd("sm_showhplaser", CmdShowHp, "Enable laser beam HP for the client.");
+
     // Admin Commands
     RegAdminCmd("sm_print_cvars_l4d_hp_laser", CmdPrintCvars, ADMFLAG_ROOT, "Print the plugin related cvars and their respective values to the console.");
 
-    CreateTimer(0.1, TimerVisible, _, TIMER_REPEAT);
     CreateTimer(0.1, TimerRender, _, TIMER_REPEAT);
 }
 
@@ -297,6 +363,10 @@ public void OnConfigsExecuted()
     GetCvars();
 
     g_bConfigLoaded = true;
+
+    HookEvents(g_bCvar_Enabled);
+
+    LateLoad();
 }
 
 /****************************************************************************************************/
@@ -304,6 +374,8 @@ public void OnConfigsExecuted()
 public void Event_ConVarChanged(Handle convar, const char[] sOldValue, const char[] sNewValue)
 {
     GetCvars();
+
+    HookEvents(g_bCvar_Enabled);
 }
 
 /****************************************************************************************************/
@@ -314,33 +386,85 @@ public void GetCvars()
     g_iCvar_survivor_max_incapacitated_count = g_hCvar_survivor_max_incapacitated_count.IntValue;
     g_bCvar_survivor_max_incapacitated_count = (g_iCvar_survivor_max_incapacitated_count > 0);
     g_fCvar_pain_pills_decay_rate = g_hCvar_pain_pills_decay_rate.FloatValue;
+    g_iCvar_survivor_limp_health = g_hCvar_survivor_limp_health.IntValue;
     g_bCvar_Enabled = g_hCvar_Enabled.BoolValue;
+    g_bCvar_Cookies = g_hCvar_Cookies.BoolValue;
     g_fCvar_ZAxis = g_hCvar_ZAxis.FloatValue;
     g_fCvar_FadeDistance = g_hCvar_FadeDistance.FloatValue;
     g_bCvar_FadeDistance = (g_fCvar_FadeDistance > 0.0);
     g_bCvar_Sight = g_hCvar_Sight.BoolValue;
+    g_fCvar_AttackDelay = g_hCvar_AttackDelay.FloatValue;
+    g_bCvar_AttackDelay = (g_fCvar_AttackDelay > 0.0);
+    g_bCvar_GradientColor = g_hCvar_GradientColor.BoolValue;
     g_hCvar_Model.GetString(g_sCvar_Model, sizeof(g_sCvar_Model));
     TrimString(g_sCvar_Model);
     g_iModelBeam = PrecacheModel(g_sCvar_Model, true);
     g_iCvar_Alpha = g_hCvar_Alpha.IntValue;
     g_fCvar_Height = g_hCvar_Height.FloatValue;
-    g_bCvar_BlackAndWhite = g_hCvar_BlackAndWhite.BoolValue;
     g_bCvar_Fill = g_hCvar_Fill.BoolValue;
     g_iCvar_FillAlpha = g_hCvar_FillAlpha.IntValue;
     g_bCvar_Outline = g_hCvar_Outline.BoolValue;
     g_fCvar_OutlineHeight = g_hCvar_OutlineHeight.FloatValue;
     g_bCvar_RenderFrame = g_hCvar_RenderFrame.BoolValue;
+    g_iFrameCount = 0;
     g_iCvar_SkipFrame = g_hCvar_SkipFrame.IntValue;
     g_bCvar_SkipFrame = (g_iCvar_SkipFrame > 0);
+    g_bCvar_BlackAndWhite = g_hCvar_BlackAndWhite.BoolValue;
     g_iCvar_Team = g_hCvar_Team.IntValue;
     g_iCvar_SurvivorTeam = g_hCvar_SurvivorTeam.IntValue;
     g_iCvar_InfectedTeam = g_hCvar_InfectedTeam.IntValue;
     g_iCvar_SpectatorTeam = g_hCvar_SpectatorTeam.IntValue;
+    g_iCvar_MultiplyAlphaTeam = g_hCvar_MultiplyAlphaTeam.IntValue;
+    g_iCvar_ClientAlphaMax = g_hCvar_ClientAlphaMax.IntValue;
+    g_bCvar_ClientAlphaMax = (g_iCvar_ClientAlphaMax > -1);
     g_fCvar_SurvivorWidth = g_hCvar_SurvivorWidth.FloatValue;
     g_fCvar_InfectedWidth = g_hCvar_InfectedWidth.FloatValue;
     g_iCvar_SI = g_hCvar_SI.IntValue;
+}
 
-    g_iFrameCount = 0;
+/****************************************************************************************************/
+
+public void LateLoad()
+{
+    for (int client = 1; client <= MaxClients; client++)
+    {
+        if (!IsClientInGame(client))
+            continue;
+
+        if (IsFakeClient(client))
+            continue;
+
+        if (!AreClientCookiesCached(client))
+            continue;
+
+        OnClientCookiesCached(client);
+    }
+
+    int entity;
+
+    entity = INVALID_ENT_REFERENCE;
+    while ((entity = FindEntityByClassname(entity, "*")) != INVALID_ENT_REFERENCE)
+    {
+        char classname[64];
+        GetEntityClassname(entity, classname, sizeof(classname));
+        OnEntityCreated(entity, classname);
+    }
+}
+
+/****************************************************************************************************/
+
+public void OnClientCookiesCached(int client)
+{
+    if (!g_bCvar_Cookies)
+        return;
+
+    if (IsFakeClient(client))
+        return;
+
+    char sValue[2];
+
+    g_cbDisable.Get(client, sValue, sizeof(sValue));
+    gc_bDisable[client] = (StringToInt(sValue) == 1 ? true : false);
 }
 
 /****************************************************************************************************/
@@ -350,9 +474,13 @@ public void OnClientDisconnect(int client)
     if (!g_bConfigLoaded)
         return;
 
+    gc_bDisable[client] = false;
+    gc_bShouldRender[client] = false;
+
     for (int target = 1; target <= MaxClients; target++)
     {
         gc_bVisible[target][client] = false;
+        gc_fLastAttack[target][client] = 0.0;
     }
 }
 
@@ -386,83 +514,60 @@ public void OnEntityCreated(int entity, const char[] classname)
             if (StrEqual(classname, CLASSNAME_TANK_ROCK))
                 ge_bInvalidTrace[entity] = true;
         }
+        case 'i':
+        {
+            if (StrEqual(classname, CLASSNAME_INFECTED))
+                ge_bInvalidTrace[entity] = true;
+        }
+        case 'w':
+        {
+            if (StrEqual(classname, CLASSNAME_WITCH))
+                ge_bInvalidTrace[entity] = true;
+        }
     }
 }
 
 /****************************************************************************************************/
 
-public Action TimerVisible(Handle timer)
+public void HookEvents(bool hook)
 {
-    if (!g_bConfigLoaded)
-        return Plugin_Continue;
-
-    for (int target = 1; target <= MaxClients; target++)
+    if (hook && !g_bEventsHooked)
     {
-        if (!IsClientInGame(target))
-            continue;
+        g_bEventsHooked = true;
 
-        int targetTeamFlag = GetTeamFlag(GetClientTeam(target));
+        HookEvent("player_hurt", Event_PlayerHurt);
 
-        for (int client = 1; client <= MaxClients; client++)
-        {
-            gc_bVisible[target][client] = false;
-
-            if (!IsClientInGame(client))
-                continue;
-
-            if (IsFakeClient(client))
-                continue;
-
-            int clientTeamFlag = GetTeamFlag(GetClientTeam(client));
-
-            if (!(clientTeamFlag & g_iCvar_Team))
-                continue;
-
-            switch (clientTeamFlag)
-            {
-                case FLAG_TEAM_SURVIVOR, FLAG_TEAM_HOLDOUT:
-                {
-                    if (!(targetTeamFlag & g_iCvar_SurvivorTeam))
-                        continue;
-                }
-                case FLAG_TEAM_INFECTED:
-                {
-                    if (!(targetTeamFlag & g_iCvar_InfectedTeam))
-                        continue;
-                }
-                case FLAG_TEAM_SPECTATOR:
-                {
-                    if (!(targetTeamFlag & g_iCvar_SpectatorTeam))
-                        continue;
-                }
-            }
-
-            if (g_bCvar_FadeDistance)
-            {
-                float targetPos[3];
-                GetClientAbsOrigin(target, targetPos);
-
-                float clientPos[3];
-                GetClientAbsOrigin(client, clientPos);
-
-                if (GetVectorDistance(targetPos, clientPos) > g_fCvar_FadeDistance)
-                    continue;
-            }
-
-            if (g_bCvar_Sight)
-            {
-                if (clientTeamFlag == FLAG_TEAM_SURVIVOR || clientTeamFlag == FLAG_TEAM_INFECTED)
-                {
-                    if (!IsVisibleTo(client, target))
-                        continue;
-                }
-            }
-
-            gc_bVisible[target][client] = true;
-        }
+        return;
     }
 
-    return Plugin_Continue;
+    if (!hook && g_bEventsHooked)
+    {
+        g_bEventsHooked = false;
+
+        UnhookEvent("player_hurt", Event_PlayerHurt);
+
+        return;
+    }
+}
+
+/****************************************************************************************************/
+
+public void Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
+{
+    if (!g_bCvar_AttackDelay)
+        return;
+
+    int target = GetClientOfUserId(event.GetInt("userid"));
+
+    if (!IsValidClientIndex(target))
+        return;
+
+    int attacker = GetClientOfUserId(event.GetInt("attacker"));
+
+    if (!IsValidClientIndex(attacker))
+        return;
+
+    gc_fLastAttack[target][attacker] = GetGameTime();
 }
 
 /****************************************************************************************************/
@@ -513,28 +618,21 @@ public void RenderHealthBar()
 {
     for (int target = 1; target <= MaxClients; target++)
     {
-        if (!IsClientInGame(target))
+        gc_bShouldRender[target] = ShouldRenderHP(target);
+
+        if (!gc_bShouldRender[target])
             continue;
 
-        if (!IsPlayerAlive(target))
-            continue;
-
-        int targetTeam = GetClientTeam(target);
-
-        if (targetTeam == TEAM_INFECTED)
-        {
-            if (IsPlayerGhost(target))
-                continue;
-
-            if (!(GetZombieClassFlag(target) & g_iCvar_SI))
-                continue;
-        }
+        CheckVisibility(target);
 
         bool isSurvivor;
         bool isIncapacitated = IsPlayerIncapacitated(target);
 
         int maxHealth = GetEntProp(target, Prop_Data, "m_iMaxHealth");
         int currentHealth = GetClientHealth(target);
+        int targetTeam = GetClientTeam(target);
+        int targetTeamFlag = GetTeamFlag(targetTeam);
+
         float radius;
 
         switch (targetTeam)
@@ -564,7 +662,16 @@ public void RenderHealthBar()
         if (maxHealth > 0)
             percentageHealth = (float(currentHealth) / float(maxHealth));
 
-        bool halfHealth = (percentageHealth <= 0.5);
+        int colorAlpha[4];
+        GetEntityRenderColor(target, colorAlpha[0], colorAlpha[1], colorAlpha[2], colorAlpha[3]);
+
+        int alpha;
+        if (g_bCvar_ClientAlphaMax && colorAlpha[3] <= g_iCvar_ClientAlphaMax)
+            alpha = 0;
+        else if (targetTeamFlag & g_iCvar_MultiplyAlphaTeam)
+            alpha = RoundFloat(g_iCvar_Alpha * colorAlpha[3] / 255.0);
+        else
+            alpha = g_iCvar_Alpha;
 
         int color[4];
         if (isIncapacitated)
@@ -572,22 +679,42 @@ public void RenderHealthBar()
             color[0] = 255;
             color[1] = 0;
             color[2] = 0;
-            color[3] = g_iCvar_Alpha;
         }
-        else if (g_bCvar_BlackAndWhite && isSurvivor && g_bCvar_survivor_max_incapacitated_count && IsPlayerBlackAndWhite(target))
+        else if (isSurvivor && g_bCvar_BlackAndWhite && g_bCvar_survivor_max_incapacitated_count && IsPlayerBlackAndWhite(target))
         {
             color[0] = 255;
             color[1] = 255;
             color[2] = 255;
-            color[3] = g_iCvar_Alpha;
+        }
+        else if (isSurvivor && !g_bCvar_GradientColor)
+        {
+            if (currentHealth >= g_iCvar_survivor_limp_health)
+            {
+                color[0] = 0;
+                color[1] = 255;
+                color[2] = 0;
+            }
+            else if (currentHealth > LOW_HEALTH)
+            {
+                color[0] = 255;
+                color[1] = 255;
+                color[2] = 0;
+            }
+            else
+            {
+                color[0] = 255;
+                color[1] = 0;
+                color[2] = 0;
+            }
         }
         else
         {
+            bool halfHealth = (percentageHealth <= 0.5);
             color[0] = halfHealth ? 255 : RoundFloat(255.0 * ((1.0 - percentageHealth) * 2));
             color[1] = halfHealth ? RoundFloat(255.0 * (percentageHealth) * 2) : 255;
             color[2] = 0;
-            color[3] = g_iCvar_Alpha;
         }
+        color[3] = alpha;
 
         float targetPos[3];
         GetClientAbsOrigin(target, targetPos);
@@ -595,36 +722,23 @@ public void RenderHealthBar()
 
         for (int client = 1; client <= MaxClients; client++)
         {
-            if (client == target)
-                continue;
-
             if (!gc_bVisible[target][client])
                 continue;
 
-            if (!IsClientInGame(client))
-                continue;
-
-            float clientPos[3];
-            GetClientAbsOrigin(client, clientPos);
-            clientPos[2] += g_fCvar_ZAxis;
-
-            float vecPos[3];
-            MakeVectorFromPoints(targetPos, clientPos, vecPos);
-
             float clientAng[3];
-            GetVectorAngles(vecPos, clientAng);
+            GetClientEyeAngles(client, clientAng);
 
             // left
             float targetMin[3];
             targetMin = targetPos;
-            targetMin[0] += radius * Cosine(DegToRad(clientAng[1] - 90.0));
-            targetMin[1] += radius * Sine(DegToRad(clientAng[1] - 90.0));
+            targetMin[0] += radius * Cosine(DegToRad(clientAng[1] + 90.0));
+            targetMin[1] += radius * Sine(DegToRad(clientAng[1] + 90.0));
 
             // right
             float targetMax[3];
             targetMax = targetPos;
-            targetMax[0] += radius * Cosine(DegToRad(clientAng[1] + 90.0));
-            targetMax[1] += radius * Sine(DegToRad(clientAng[1] + 90.0));
+            targetMax[0] += radius * Cosine(DegToRad(clientAng[1] - 90.0));
+            targetMax[1] += radius * Sine(DegToRad(clientAng[1] - 90.0));
 
             // current
             float targetCurrent[3];
@@ -643,12 +757,20 @@ public void RenderHealthBar()
 
             if (g_bCvar_Fill)
             {
-                int colorfill[4];
-                colorfill = color;
-                colorfill[3] = g_iCvar_FillAlpha;
+                // fill bar
+                int alphaFill;
+
+                if (targetTeamFlag & g_iCvar_MultiplyAlphaTeam)
+                    alphaFill = RoundFloat(g_iCvar_FillAlpha * colorAlpha[3] / 255.0);
+                else
+                    alphaFill = g_iCvar_FillAlpha;
+
+                int colorFill[4];
+                colorFill = color;
+                colorFill[3] = alphaFill;
                 vPoint1 = targetCurrent;
                 vPoint2 = targetMax;
-                TE_SetupBeamPoints(vPoint1, vPoint2, g_iModelBeam, 0, 0, 0, g_fBeamLife, g_fCvar_Height, g_fCvar_Height, 0, 0.0, colorfill, 0);
+                TE_SetupBeamPoints(vPoint1, vPoint2, g_iModelBeam, 0, 0, 0, g_fBeamLife, g_fCvar_Height, g_fCvar_Height, 0, 0.0, colorFill, 0);
                 TE_SendToClient(client);
             }
 
@@ -692,6 +814,105 @@ public void RenderHealthBar()
 
 /****************************************************************************************************/
 
+bool ShouldRenderHP(int target)
+{
+    if (!g_bCvar_Enabled)
+        return false;
+
+    if (!IsClientInGame(target))
+        return false;
+
+    if (!IsPlayerAlive(target))
+        return false;
+
+    int targetTeam = GetClientTeam(target);
+    int targetTeamFlag = GetTeamFlag(targetTeam);
+
+    if (!(targetTeamFlag & g_iCvar_Team))
+        return false;
+
+    if (targetTeam == TEAM_INFECTED)
+    {
+        if (IsPlayerGhost(target))
+            return false;
+
+        if (!(GetZombieClassFlag(target) & g_iCvar_SI))
+            return false;
+    }
+
+    return true;
+}
+
+/****************************************************************************************************/
+
+void CheckVisibility(int target)
+{
+    int targetTeamFlag = GetTeamFlag(GetClientTeam(target));
+
+    for (int client = 1; client <= MaxClients; client++)
+    {
+        gc_bVisible[target][client] = false;
+
+        if (client == target)
+            continue;
+
+        if (gc_bDisable[client])
+            continue;
+
+        if (!IsClientInGame(client))
+            continue;
+
+        if (IsFakeClient(client))
+            continue;
+
+        int clientTeamFlag = GetTeamFlag(GetClientTeam(client));
+
+        switch (clientTeamFlag)
+        {
+            case FLAG_TEAM_SURVIVOR, FLAG_TEAM_HOLDOUT:
+            {
+                if (!(targetTeamFlag & g_iCvar_SurvivorTeam))
+                    continue;
+            }
+            case FLAG_TEAM_INFECTED:
+            {
+                if (!(targetTeamFlag & g_iCvar_InfectedTeam))
+                    continue;
+            }
+            case FLAG_TEAM_SPECTATOR:
+            {
+                if (!(targetTeamFlag & g_iCvar_SpectatorTeam))
+                    continue;
+            }
+        }
+
+        if (g_bCvar_FadeDistance)
+        {
+            float targetPos[3];
+            GetClientAbsOrigin(target, targetPos);
+
+            float clientPos[3];
+            GetClientAbsOrigin(client, clientPos);
+
+            if (GetVectorDistance(targetPos, clientPos) > g_fCvar_FadeDistance)
+                continue;
+        }
+
+        if (targetTeamFlag == FLAG_TEAM_INFECTED && clientTeamFlag == FLAG_TEAM_SURVIVOR)
+        {
+            if (g_bCvar_AttackDelay && (GetGameTime() - gc_fLastAttack[target][client] > g_fCvar_AttackDelay))
+                continue;
+
+            if (g_bCvar_Sight && !IsVisibleTo(client, target))
+                continue;
+        }
+
+        gc_bVisible[target][client] = true;
+    }
+}
+
+/****************************************************************************************************/
+
 bool IsVisibleTo(int client, int target)
 {
     float vClientPos[3];
@@ -717,7 +938,7 @@ bool IsVisibleTo(int client, int target)
             vEntityPos[2] -= 62.0; // results the same as GetClientAbsOrigin
 
             delete trace;
-            trace = TR_TraceHullFilterEx(vClientPos, vEntityPos, g_fVPlayerMins, g_fVPlayerMaxs, MASK_PLAYERSOLID, TraceFilter, target);
+            trace = TR_TraceHullFilterEx(vClientPos, vEntityPos, g_fvPlayerMins, g_fvPlayerMaxs, MASK_PLAYERSOLID, TraceFilter, target);
 
             if (TR_DidHit(trace))
                 isVisible = (TR_GetEntityIndex(trace) == target);
@@ -742,8 +963,110 @@ public bool TraceFilter(int entity, int contentsMask, int client)
     return ge_bInvalidTrace[entity] ? false : true;
 }
 
+// ====================================================================================================
+// Menus
+// ====================================================================================================
+public void CreateToggleMenu(int client)
+{
+    Menu menu = new Menu(HandleToggleMenu);
+    menu.SetTitle("HP Laser");
+
+    if (gc_bDisable[client])
+        menu.AddItem("0", "☐ OFF");
+    else
+        menu.AddItem("1", "☑ ON");
+
+    menu.Display(client, MENU_TIME_FOREVER);
+}
+
 /****************************************************************************************************/
 
+public int HandleToggleMenu(Menu menu, MenuAction action, int client, int args)
+{
+    switch (action)
+    {
+        case MenuAction_Select:
+        {
+            char sArg[2];
+            menu.GetItem(args, sArg, sizeof(sArg));
+
+            bool disable = (StringToInt(sArg) == 1 ? true : false);
+            gc_bDisable[client] = disable;
+
+            if (g_bCvar_Cookies)
+                g_cbDisable.Set(client, disable ? "1" : "0");
+
+            CreateToggleMenu(client);
+        }
+        case MenuAction_End:
+        {
+            delete menu;
+        }
+    }
+
+    return 0;
+}
+
+// ====================================================================================================
+// Public Commands
+// ====================================================================================================
+public Action CmdHpMenu(int client, int args)
+{
+    if (!g_bCvar_Enabled)
+        return Plugin_Handled;
+
+    if (client == 0 && !IsDedicatedServer())
+        client = GetHostClient();
+
+    if (!IsValidClient(client))
+        return Plugin_Handled;
+
+    CreateToggleMenu(client);
+
+    return Plugin_Handled;
+}
+
+/****************************************************************************************************/
+
+public Action CmdHideHp(int client, int args)
+{
+    if (!g_bCvar_Enabled)
+        return Plugin_Handled;
+
+    if (client == 0 && !IsDedicatedServer())
+        client = GetHostClient();
+
+    if (!IsValidClient(client))
+        return Plugin_Handled;
+
+    gc_bDisable[client] = true;
+    g_cbDisable.Set(client, "1");
+
+    return Plugin_Handled;
+}
+
+/****************************************************************************************************/
+
+public Action CmdShowHp(int client, int args)
+{
+    if (!g_bCvar_Enabled)
+        return Plugin_Handled;
+
+    if (client == 0 && !IsDedicatedServer())
+        client = GetHostClient();
+
+    if (!IsValidClient(client))
+        return Plugin_Handled;
+
+    gc_bDisable[client] = false;
+    g_cbDisable.Set(client, "0");
+
+    return Plugin_Handled;
+}
+
+// ====================================================================================================
+// Admin Commands
+// ====================================================================================================
 public Action CmdPrintCvars(int client, int args)
 {
     PrintToConsole(client, "");
@@ -753,23 +1076,27 @@ public Action CmdPrintCvars(int client, int args)
     PrintToConsole(client, "");
     PrintToConsole(client, "l4d_hp_laser_version : %s", PLUGIN_VERSION);
     PrintToConsole(client, "l4d_hp_laser_enable : %b (%s)", g_bCvar_Enabled, g_bCvar_Enabled ? "true" : "false");
+    PrintToConsole(client, "l4d_hp_laser_cookies : %b (%s)", g_bCvar_Cookies, g_bCvar_Cookies ? "true" : "false");
     PrintToConsole(client, "l4d_hp_laser_z_axis : %.2f", g_fCvar_ZAxis);
     PrintToConsole(client, "l4d_hp_laser_fade_distance : %i (%s)", g_fCvar_FadeDistance, g_bCvar_FadeDistance ? "true" : "false");
     PrintToConsole(client, "l4d_hp_laser_sight : %b (%s)", g_bCvar_Sight, g_bCvar_Sight ? "true" : "false");
+    PrintToConsole(client, "l4d_hp_laser_gradient_color : %b (%s)", g_bCvar_GradientColor, g_bCvar_GradientColor ? "true" : "false");
     PrintToConsole(client, "l4d_hp_laser_model : \"%s\"", g_sCvar_Model);
     PrintToConsole(client, "l4d_hp_laser_alpha : %i", g_iCvar_Alpha);
     PrintToConsole(client, "l4d_hp_laser_height : %.2f", g_fCvar_Height);
-    PrintToConsole(client, "l4d_hp_laser_black_and_white : %b (%s)", g_bCvar_BlackAndWhite, g_bCvar_BlackAndWhite ? "true" : "false");
     PrintToConsole(client, "l4d_hp_laser_fill : %b (%s)", g_bCvar_Fill, g_bCvar_Fill ? "true" : "false");
     PrintToConsole(client, "l4d_hp_laser_fill_alpha : %i", g_iCvar_FillAlpha);
     PrintToConsole(client, "l4d_hp_laser_outline : %b (%s)", g_bCvar_Outline, g_bCvar_Outline ? "true" : "false");
     PrintToConsole(client, "l4d_hp_laser_outline_height : %.3f", g_fCvar_OutlineHeight);
     PrintToConsole(client, "l4d_hp_laser_render_frame : %b (%s)", g_bCvar_RenderFrame, g_bCvar_RenderFrame ? "true" : "false");
     PrintToConsole(client, "l4d_hp_laser_skip_frame : %i (%s)", g_iCvar_SkipFrame, g_bCvar_SkipFrame ? "true" : "false");
+    PrintToConsole(client, "l4d_hp_laser_black_and_white : %b (%s)", g_bCvar_BlackAndWhite, g_bCvar_BlackAndWhite ? "true" : "false");
     PrintToConsole(client, "l4d_hp_laser_team : %i", g_iCvar_Team);
     PrintToConsole(client, "l4d_hp_laser_survivor_team : %i", g_iCvar_SurvivorTeam);
     PrintToConsole(client, "l4d_hp_laser_infected_team : %i", g_iCvar_InfectedTeam);
     PrintToConsole(client, "l4d_hp_laser_spectator_team : %i", g_iCvar_SpectatorTeam);
+    PrintToConsole(client, "l4d_hp_laser_multiply_alpha_team : %i", g_iCvar_MultiplyAlphaTeam);
+    PrintToConsole(client, "l4d_hp_laser_client_alpha_max : %i (%s)", g_iCvar_ClientAlphaMax, g_bCvar_ClientAlphaMax ? "true" : "false");
     PrintToConsole(client, "l4d_hp_laser_survivor_width : %.2f", g_fCvar_SurvivorWidth);
     PrintToConsole(client, "l4d_hp_laser_infected_width : %.2f", g_fCvar_InfectedWidth);
     PrintToConsole(client, "l4d_hp_laser_si : %i", g_iCvar_SI);
@@ -779,6 +1106,7 @@ public Action CmdPrintCvars(int client, int args)
     PrintToConsole(client, "survivor_incap_health : %i", g_iCvar_survivor_incap_health);
     PrintToConsole(client, "survivor_max_incapacitated_count : %i", g_iCvar_survivor_max_incapacitated_count);
     PrintToConsole(client, "pain_pills_decay_rate : %.2f", g_fCvar_pain_pills_decay_rate);
+    PrintToConsole(client, "survivor_limp_health : %i", g_iCvar_survivor_limp_health);
     PrintToConsole(client, "");
     PrintToConsole(client, "======================================================================");
     PrintToConsole(client, "");
@@ -798,6 +1126,19 @@ public Action CmdPrintCvars(int client, int args)
 bool IsValidClientIndex(int client)
 {
     return (1 <= client <= MaxClients);
+}
+
+/****************************************************************************************************/
+
+/**
+ * Validates if is a valid client.
+ *
+ * @param client          Client index.
+ * @return                True if client index is valid and client is in game, false otherwise.
+ */
+bool IsValidClient(int client)
+{
+    return (IsValidClientIndex(client) && IsClientInGame(client));
 }
 
 /****************************************************************************************************/
@@ -941,6 +1282,35 @@ int GetTeamFlag(int team)
         default:
             return FLAG_TEAM_NONE;
     }
+}
+
+/****************************************************************************************************/
+
+/**
+ * Returns the client index that is hosting the listen server.
+ */
+public int GetHostClient()
+{
+    int entity = FindEntityByClassname(-1, "terror_player_manager");
+
+    if (!IsValidEntity(entity))
+        return 0;
+
+    int offset = FindSendPropInfo("CTerrorPlayerResource", "m_listenServerHost");
+
+    if (offset == -1)
+        return 0;
+
+    bool isHost[MAXPLAYERS+1];
+    GetEntDataArray(entity, offset, isHost, MAXPLAYERS+1, 1);
+
+    for (int client = 1; client < sizeof(isHost); client++)
+    {
+        if (isHost[client])
+            return client;
+    }
+
+    return 0;
 }
 
 /****************************************************************************************************/
