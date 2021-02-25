@@ -565,7 +565,10 @@ public void HandlePackets(const char[] sBuffer, int iSize)
 			if (SupportsHexColor(g_evEngine))
 				if (g_evEngine==Engine_Left4Dead2)
 				{
-					CPrintToChatAll("{green}[%s] {cyan}%s{orange}: {white}%s", sEntity, sName, sMessage);
+					char rawmsg[MAX_COMMAND_LENGTH];
+					Format(rawmsg, sizeof(rawmsg), "%t", "SupportsHexColorMessageChat", sEntity, sName, sMessage);
+					CPrintToChatAll("%s",rawmsg);
+					//CPrintToChatAll("{green}[%s] {cyan}%s{orange}: {white}%s", sEntity, sName, sMessage);
 				}
 				else
 					CPrintToChatAll("{gold}[%s] {azure}%s{white}: {grey}%s", sEntity, sName, sMessage);
@@ -601,7 +604,7 @@ public void HandlePackets(const char[] sBuffer, int iSize)
 				if (g_evEngine==Engine_Left4Dead2)
 				{
 					char rawmsg[MAX_COMMAND_LENGTH];
-					Format(rawmsg, sizeof(rawmsg), "%T", "SupportsHexColorMessageEvent", sEvent, sData);
+					Format(rawmsg, sizeof(rawmsg), "%t", "SupportsHexColorMessageEvent", sEvent, sData);
 					CPrintToChatAll("%s",rawmsg);
 					//CPrintToChatAll("{green}[%s]{cyan}: {white}%s", sEvent, sData);
 				}
