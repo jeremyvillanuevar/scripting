@@ -29,6 +29,7 @@
 #define MAT_HALO			"materials/sprites/halo01.vmt"
 #define MAT_BLOOD			"materials/sprites/bloodspray.vmt"
 
+bool g_bCvar_IsDebugging;
 
 int g_iColor_Green[]	= { 000, 255, 000, 20 };
 int g_iColor_Red[]		= { 255, 000, 000, 20 };
@@ -162,7 +163,6 @@ enum struct EntityManager
 	bool	bIsRound_Finale;
 	bool	bIsFindDoorInit;
 	bool	bIsVehiclReady;
-	bool	bIsRoundStop;
 	
 	Handle	hTimer[TIMER_LENGTH];
 	char	sCurrentMap[PLATFORM_MAX_PATH];
@@ -183,7 +183,6 @@ enum struct EntityManager
 		this.bIsRound_Finale 	= false;
 		this.bIsFindDoorInit	= false;
 		this.bIsVehiclReady		= false;
-		this.bIsRoundStop		= false;
 		
 		this.TimerKill();
 	}
@@ -194,11 +193,53 @@ enum struct EntityManager
 		{
 			delete this.hTimer[i];
 		}
+		Print_ServerText( "All Timers Deleted", g_bCvar_IsDebugging );
 	}
 }
 EntityManager g_EMEntity;
 
-
+void Print_ServerText( const char[] text, bool print )
+{
+	if( !print ) return;
+	
+	char gauge_none[2]  = "";
+	char gauge_tags[16] = "[SAFEROOM]:";
+	char gauge_char[99] = "===========================================================================";
+	char gauge_side[64];
+	FormatEx( gauge_side, sizeof( gauge_side ), "" );
+	
+	int len_char = strlen( gauge_char );
+	int len_text = strlen( text );
+	int len_tags = strlen( gauge_tags );
+	int len_diff = len_char - len_text - len_tags - 2;
+	
+	for( int i = 0; i < len_diff; i++ )
+	{
+		gauge_side[i] = gauge_char[0];
+	}
+	
+	char gauge_buff[99];
+	Format( gauge_buff, sizeof( gauge_buff ), "== %s %s %s", gauge_tags, text, gauge_side );
+	
+	int len1 = strlen( gauge_buff );
+	if( len1 > len_char )
+	{
+		for( int i = len_char; i < sizeof( gauge_char ); i++ )
+		{
+			gauge_buff[i] = gauge_none[0];
+		}
+	}
+	
+	// ( "===========================================================================" );
+	// ( "== [SAFEROOM]: Timer damage terminated for finale =========================" );
+	// ( "===========================================================================" );
+	
+	PrintToServer( " " );
+	PrintToServer( "%s", gauge_char );
+	PrintToServer( "%s", gauge_buff );
+	PrintToServer( "%s", gauge_char );
+	PrintToServer( " " );
+}
 
 
 
