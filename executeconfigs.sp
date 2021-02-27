@@ -453,7 +453,7 @@ public Action Timer_ExecAMovementReader(Handle timer,int target)
 			int validAnims[1939];
 			validAnims[1]=10;
 			validAnims[2]=14;			
-			for (int validation = 1; i <= 1939; i++)
+			for (int validation = 1; validation <= 1939; validation++)
 			{
 				if (anim==validAnims[validation])
 				{
@@ -461,17 +461,19 @@ public Action Timer_ExecAMovementReader(Handle timer,int target)
 				}				
 			}		
 			
+			/*
 			bool validAnimation = true;
 			int invalidAnims[1939];
 			invalidAnims[1]=10;
 			invalidAnims[2]=12;			
-			for (int validation = 1; i <= 1939; i++)
+			for (int validation = 1; validation <= 1939; validation++)
 			{
 				if (anim==invalidAnims[validation])
 				{
 					validAnimation=false;
 				}				
 			}	
+			*/
 			
 			if (validAnimation)
 			{
