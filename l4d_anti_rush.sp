@@ -116,6 +116,7 @@ float g_fHintWarn[MAXPLAYERS+1];
 float g_fLastFlow[MAXPLAYERS+1];
 Handle g_hTimerAntiRushHuman;
 //Handle g_hTimerAntiRushBot;
+static bool FinaleStarted; // States whether the finale has started or not
 
 
 
@@ -192,6 +193,10 @@ public void OnPluginStart()
 
 	HookEvent("player_bot_replace", player_bot_replace );	
 	HookEvent("bot_player_replace", bot_player_replace );	
+	
+	HookEvent("finale_start", evtFinaleStart);
+	
+	FinaleStarted = false;
 
 	#if DEBUG_BENCHMARK
 	g_Prof = CreateProfiler();
@@ -352,6 +357,11 @@ public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcas
 	delete g_hTimerAntiRushHuman;
 	//delete g_hTimerAntiRushBot;
 	
+	g_hTimerAntiRushHuman = CreateTimer(1.0, TimerAntiRushHuman, _, TIMER_REPEAT);
+
+
+/*
+
 	bool isGauntlet=false;
 	int entity = FindEntityByClassname(-1, "trigger_finale");
 	if( entity != -1 )
@@ -360,6 +370,7 @@ public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcas
 		if( GetEntProp(entity, Prop_Data, "m_type") != 1 ) isGauntlet=true;
 	}
 	
+
 	if (L4D_IsMissionFinalMap())
 	{
 		// Finales allowed
@@ -385,7 +396,7 @@ public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcas
 		g_hTimerAntiRushHuman = CreateTimer(1.0, TimerAntiRushHuman, _, TIMER_REPEAT);
 		//g_hTimerAntiRushBot = CreateTimer(1.0, TimerAntiRushBot, _, TIMER_REPEAT);
 	}
-
+*/
 }
 
 public Action Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -412,6 +423,13 @@ public Action Event_PlayerTeam(Event event, const char[] name, bool dontBroadcas
 	}
 }
 
+// This event serves to make sure the bots spawn at the start of the finale event. The director disallows spawning until the survivors have started the event, so this was
+// definitely needed.
+public Action evtFinaleStart(Event event, const char[] name, bool dontBroadcast) 
+{
+	LogMessage("[AR] Finale Started");
+	FinaleStarted = true;	
+}
 
 //Fires when a bot is attempting to replace a player.
 public void player_bot_replace(Event Spawn_Event, const char[] Spawn_Name, bool Spawn_Broadcast)
@@ -444,7 +462,8 @@ void teleportbotahead(int client)
 
 public void OnMapStart()
 {
-	g_bMapStarted = true;
+	g_bMapStarted = true;	
+	FinaleStarted = false;
 }
 
 public void OnMapEnd()
@@ -495,6 +514,7 @@ void ResetSlowdown()
 public Action TimerAntiRushHuman(Handle timer)
 {
 	if( !g_bMapStarted ) return Plugin_Continue;
+	if (FinaleStarted) RequestFrame(OnNextFrame);
 	#if DEBUG_BENCHMARK
 	StartProfiling(g_Prof);
 	#endif
@@ -732,6 +752,13 @@ public Action TimerAntiRushHuman(Handle timer)
 	#endif
 
 	return Plugin_Continue;
+}
+
+
+
+public void OnNextFrame()
+{
+	delete g_hTimerAntiRushHuman;	
 }
 
 /* Remove this line to enable, if you want to limit speed (slower) than default when walking/crouched.

@@ -4,6 +4,7 @@
 #include <sourcemod>
 #include <sdktools>
 #include <geoip>
+#include <left4dhooks>
 
 #define PLUGIN_VERSION "1.2"
 
@@ -85,6 +86,7 @@ bool g_bVoteDisplayed;
 float g_fDestPos[3];
 int g_iInitiator;
 int g_iTankCount;
+int g_iVoteCommand = 1;
 
 ConVar g_hCvarMaxDist;
 ConVar g_hCvarDelay;
@@ -114,9 +116,15 @@ public void OnPluginStart()
 	AutoExecConfig(true,				"sm_votetele");
 	
 	RegConsoleCmd("sm_tele", Command_Votetele);
+	RegConsoleCmd("sm_traer", Command_Votetele);
+	RegConsoleCmd("sm_traeramigos", Command_Votetele);
 	RegConsoleCmd("sm_noobs", Command_Votetele);
 	RegConsoleCmd("sm_noob", Command_Votetele);
 	RegConsoleCmd("sm_stuck", Command_Unstuck);
+	RegConsoleCmd("sm_acercarseaamigos", Command_VoteGotoF);
+	RegConsoleCmd("sm_acercarse", Command_VoteGotoF);
+	RegConsoleCmd("sm_acercar", Command_VoteGotoF);
+	RegConsoleCmd("sm_gotofriends", Command_VoteGotoF);
 	
 	RegAdminCmd("sm_veto", 			Command_Veto, 		ADMFLAG_VOTE, 	"Allow admin to veto current vote.");
 	RegAdminCmd("sm_votepass", 		Command_Votepass, 	ADMFLAG_BAN, 	"Allow admin to bypass current vote.");
@@ -214,43 +222,72 @@ public Action Command_Votepass(int client, int args)
 
 public Action Command_Votetele(int client, int args)
 {
-	if(client != 0) StartVoteAccessCheck(client);
+	g_iVoteCommand =1;//Command_Votetele
+	if(client != 0)
+	{
+		if (StartVoteAccessCheck(client))
+		{
+			g_iInitiator = client;
+			GetClientAbsOrigin(client, g_fDestPos);
+			StartVoteTele(client);
+		}
+	}
 	return Plugin_Handled;
 }
 
-void StartVoteAccessCheck(int client)
+public Action Command_VoteGotoF(int client, int args)
 {
+	g_iVoteCommand =2;//Command_VoteGotoF
+	if(client != 0)
+	{
+		if (StartVoteAccessCheck(client))
+		{
+			g_iInitiator = client;
+			GetClientAbsOrigin(client, g_fDestPos);
+			StartVoteTele(client);
+		}
+	}
+	return Plugin_Handled;
+}
+
+bool StartVoteAccessCheck(int client)
+{
+	
 	if (IsVoteInProgress() || g_bVoteInProgress) {
 		CPrintToChat(client, "%t", "other_vote");
 		LogVoteAction(client, "[DENY] Reason: another vote is in progress.");
-		return;
+		return false;
 	}
 	
 	if (HasOverrideAccess(client)) {
 		LogVoteAction(client, "[FORCE-TELEPORTED]");
 		g_iInitiator = client;
 		GetClientAbsOrigin(client, g_fDestPos);
-		MakeTeleport();
-		return;
+		if (g_iVoteCommand==1)
+		{
+			MakeTeleport();
+		}
+		if (g_iVoteCommand==2)
+		{
+			MakeGotoAhead(g_iInitiator);
+		}
+		return false;
 	}
 	
 	if (!IsVoteAllowed(client))
 	{
 		CPrintToChatAll("%t", "no_access", client); // "%s tried to teleport noobs, but has no access."
 		LogVoteAction(client, "[NO ACCESS]");
-		return;
+		return false;
 	}
 	
 	if (g_hConVarPreventOnTanks.BoolValue && g_iTankCount)
 	{
 		CPrintToChatAll("%t", "no_access_tanks", client); // "%s can't vote for teleport, because there are tanks on the map"
 		LogVoteAction(client, "[NO ACCESS-TANKS]");
-		return;
+		return false;
 	}
-	
-	g_iInitiator = client;
-	GetClientAbsOrigin(client, g_fDestPos);
-	StartVoteTele(client);
+	return true;
 }
 
 int GetSurvivorsCount() {
@@ -329,18 +366,36 @@ void StartVoteTele(int client)
 	menu.AddItem("", "No");
 	menu.ExitButton = false;
 	
-	LogVoteAction(client, "[STARTED] by");
+	if (g_iVoteCommand==1)
+	{
+		LogVoteAction(client, "[STARTED] VOTETELE by");
+		CPrintToChatAll("%t", "vote_started_tele", client); // %N is started vote for teleporting noobs
+		PrintToServer("Vote for teleporting is started by: %N", client);
+		PrintToConsoleAll("Vote for teleporting is started by: %N", client);
 	
-	CPrintToChatAll("%t", "vote_started", client); // %N is started vote for teleporting noobs
-	PrintToServer("Vote for teleporting is started by: %N", client);
-	PrintToConsoleAll("Vote for teleporting is started by: %N", client);
+	}
+	if (g_iVoteCommand==2)
+	{
+		LogVoteAction(client, "[STARTED] VOTEGOTOF by");
+		CPrintToChatAll("%t", "vote_started_gotof", client);
+		PrintToServer("Vote for teleporting is started by: %N", client);
+		PrintToConsoleAll("Vote for teleporting is started by: %N", client);
 	
+	}
 	g_bVotepass = false;
 	g_bVeto = false;
 	g_bVoteDisplayed = false;
 	
 	CreateTimer(g_hCvarAnnounceDelay.FloatValue, Timer_VoteDelayed, menu);
-	CPrintHintTextToAll("%t", "vote_started_announce");
+	
+	if (g_iVoteCommand==1)
+	{
+		CPrintHintTextToAll("%t", "vote_started_tele_announce");
+	}	
+	if (g_iVoteCommand==2)
+	{
+		CPrintHintTextToAll("%t", "vote_started_gotof_announce");
+	}	
 }
 
 Action Timer_VoteDelayed(Handle timer, Menu menu)
@@ -393,7 +448,14 @@ public int Handle_Votetele(Menu menu, MenuAction action, int param1, int param2)
 		}
 		case MenuAction_Display:
 		{
-			Format(buffer, sizeof(buffer), "%T", "vote_started_announce", param1); // "Do you want to teleport noobs?"
+			if (g_iVoteCommand==1)
+			{
+				Format(buffer, sizeof(buffer), "%T", "vote_started_tele_announce", param1); // "Do you want to teleport noobs?"
+			}	
+			if (g_iVoteCommand==2)
+			{
+				Format(buffer, sizeof(buffer), "%T", "vote_started_gotof_announce", param1); // "Do you want to teleport noobs?"
+			}	
 			menu.SetTitle(buffer);
 		}
 	}
@@ -403,8 +465,16 @@ public int Handle_Votetele(Menu menu, MenuAction action, int param1, int param2)
 void Handler_PostVoteAction(bool bVoteSuccess)
 {
 	if (bVoteSuccess) {
-		MakeTeleport();
-		LogVoteAction(0, "[TELEPORTED]");
+		if (g_iVoteCommand==1)
+		{	
+			MakeTeleport();
+			LogVoteAction(0, "[TELEPORTED]");
+		}
+		if (g_iVoteCommand==2)
+		{	
+			MakeGotoAhead(g_iInitiator);
+			LogVoteAction(0, "[GOTOF]");
+		}
 		CPrintToChatAll("%t", "vote_success");
 	}
 	else {
@@ -429,6 +499,29 @@ void MakeTeleport()
 			}
 		}
 	}
+}
+
+void MakeGotoAhead(int client)
+{
+	float vPos[3], vDest[3];
+	if (IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client)) {
+		//Initialize
+		GetClientAbsOrigin(client, vPos);
+		GetClientAbsOrigin(GetAheadClient(), g_fDestPos);		
+		if (IsClientStuck(client) || GetVectorDistance(vPos, g_fDestPos) > g_hCvarMaxDist.FloatValue) {
+			//Math
+			vDest[0] = g_fDestPos[0] + GetRandomFloat(0.0, 5.0);
+			vDest[1] = g_fDestPos[1] + GetRandomFloat(0.0, 5.0);
+			vDest[2] = g_fDestPos[2];
+			//Teleport
+			TeleportEntity(client, vDest, NULL_VECTOR, NULL_VECTOR);
+		}
+	}
+
+	
+			
+	
+	
 }
 
 bool IsClientStuck(int iClient)
@@ -564,4 +657,48 @@ stock void CPrintHintTextToAll(const char[] format, any ...)
             PrintHintText(i, buffer);
         }
     }
+}
+
+
+int GetAheadClient()
+{	
+	float flow;
+	int count, countflow, index;
+	// Get survivors flow distance
+	ArrayList aList = new ArrayList(2);
+	// Account for incapped
+	int clients[MAXPLAYERS+1];
+	int client=0;
+	countflow=0;
+	// Check valid survivors, count incapped
+	for( int i = 1; i <= MaxClients; i++ )
+	{
+		if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
+		{
+			clients[count++] = i;
+		}
+	}
+
+	for( int i = 0; i < count; i++ )
+	{
+		client = clients[i];
+		// Ignore bot
+		if(IsFakeClient(client))
+			continue;
+		flow = L4D2Direct_GetFlowDistance(client);
+		if( flow && flow != -9999.0 ) // Invalid flows
+		{
+			countflow++;
+			index = aList.Push(flow);
+			aList.Set(index, client, 1);
+		}
+	}
+	// Incase not enough players or some have invalid flow distance, we still need an average.
+	if( countflow >= 1 )
+	{
+		aList.Sort(Sort_Descending, Sort_Float);
+		client = aList.Get(0, 1);
+	}
+	delete aList;
+	return client;
 }

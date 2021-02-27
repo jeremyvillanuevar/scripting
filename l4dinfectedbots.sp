@@ -733,6 +733,7 @@ ConVar h_SecondWaveRelax_Enable; // Related to the second wave
 ConVar h_SecondWaveRelaxOnFinale_Enable;
 ConVar h_PlayerMultiplyFinalLimitScale,h_PlayerMultiplyFinalLimit;
 ConVar h_SecondWaveRelaxTimeScale,h_SecondWaveRelaxTime;
+ConVar h_SecondWaveFinalRelaxTimeScale,h_SecondWaveFinalRelaxTime;
 
 
 //Handle
@@ -802,8 +803,9 @@ float g_fPlayerAddCommonLimitScale;
 float g_fPlayerAddCommonLimit;
 float g_fPlayerMultiplyFinalLimitScale;
 float g_fPlayerMultiplyFinalLimit;
-float g_fSecondWaveRelaxTime;
-float g_fSecondWaveRelaxTimeScale;
+float g_fSecondWaveRelaxTime, g_fSecondWaveRelaxTimeScale;
+float g_fSecondWaveFinalRelaxTime, g_fSecondWaveFinalRelaxTimeScale;
+
 
 public Plugin myinfo = 
 {
@@ -953,6 +955,8 @@ public void OnPluginStart()
 	h_SecondWaveRelaxTime = CreateConVar("l4d_infectedbots_secondwave_time", "2", "time = 'time'÷ 'secondwave_time_scale' × 'secondwave_time'.", FCVAR_NOTIFY, true, 0.0); 
 	h_SecondWaveRelaxTimeScale = CreateConVar("l4d_infectedbots_secondwave_time_scale", "1", "time = 'time'÷ 'secondwave_time_scale' × 'secondwave_time'.", FCVAR_NOTIFY, true, 1.0); 
 
+	h_SecondWaveFinalRelaxTime = CreateConVar("l4d_infectedbots_secondwave_final_time", "2", "time = 'time'÷ 'secondwave_finale_time_scale' × 'secondwave_finale_time'.", FCVAR_NOTIFY, true, 0.0); 
+	h_SecondWaveFinalRelaxTimeScale = CreateConVar("l4d_infectedbots_secondwave_final_time_scale", "1", "time = 'time'÷ 'secondwave_finale_time_scale' × 'secondwave_finale_time'.", FCVAR_NOTIFY, true, 1.0); 
 	
 	h_GameMode = FindConVar("mp_gamemode");
 	h_GameMode.AddChangeHook(ConVarGameMode);
@@ -1020,6 +1024,8 @@ public void OnPluginStart()
 	h_SecondWaveRelaxOnFinale_Enable.AddChangeHook(ConVarChanged_Cvars);
 	h_SecondWaveRelaxTime.AddChangeHook(ConVarChanged_Cvars);
 	h_SecondWaveRelaxTimeScale.AddChangeHook(ConVarChanged_Cvars);
+	h_SecondWaveFinalRelaxTime.AddChangeHook(ConVarChanged_Cvars);
+	h_SecondWaveFinalRelaxTimeScale.AddChangeHook(ConVarChanged_Cvars);
 	h_PlayerMultiplyFinalLimit.AddChangeHook(ConVarChanged_Cvars);
 	h_PlayerMultiplyFinalLimitScale.AddChangeHook(ConVarChanged_Cvars);
 	
@@ -1165,6 +1171,8 @@ void GetCvars()
 	g_fPlayerMultiplyFinalLimit= h_PlayerMultiplyFinalLimit.FloatValue;
 	g_fSecondWaveRelaxTimeScale= h_SecondWaveRelaxTimeScale.FloatValue;
 	g_fSecondWaveRelaxTime= h_SecondWaveRelaxTime.FloatValue;
+	g_fSecondWaveFinalRelaxTimeScale= h_SecondWaveFinalRelaxTimeScale.FloatValue;
+	g_fSecondWaveFinalRelaxTime= h_SecondWaveFinalRelaxTime.FloatValue;
 }
 
 public void ConVarMaxPlayerZombies(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -1776,6 +1784,8 @@ public void OnMapStart()
 	GetCurrentMap(sMap, sizeof(sMap));
 	if(StrEqual("c6m1_riverbank", sMap, false))
 		g_bSpawnWitchBride = true;
+	
+	FinaleStarted = false;
 }
 
 public void OnMapEnd()
@@ -3066,23 +3076,20 @@ public Action TankSpawner(Handle timer, int client)
 	int IndexCount = 0;
 	float position[3];
 	int tankhealth;
-	bool tankonfire;
-	
+	bool tankonfire;	
 	if (client && IsClientInGame(client))
 	{
 		tankhealth = GetClientHealth(client);
 		GetClientAbsOrigin(client, position);
 		if (GetEntProp(client, Prop_Data, "m_fFlags") & FL_ONFIRE && PlayerIsAlive(client))
 			tankonfire = true;
-	}
-	
+	}	
 	if (g_bCoopPlayableTank)
 	{
 		for (int t=1;t<=MaxClients;t++)
 		{
 			// We check if player is in game
-			if (!IsClientInGame(t)) continue;
-			
+			if (!IsClientInGame(t)) continue;			
 			// Check if client is infected ...
 			if (GetClientTeam(t)!=TEAM_INFECTED) continue;
 			
@@ -3106,20 +3113,16 @@ public Action TankSpawner(Handle timer, int client)
 		MaxPlayerTank--;
 		#if DEBUG
 		PrintToServer("Tank Kicked");
-		#endif
-		
+		#endif		
 		int tank = GetRandomInt(1, IndexCount);  // pick someone from the valid targets
-		WillBeTank[Index[tank]] = true;
-		
+		WillBeTank[Index[tank]] = true;		
 		#if DEBUG
 		PrintToServer("[TS] Random Number pulled: %i, from %i", tank, IndexCount);
 		PrintToServer("[TS] Client chosen to be Tank: %i", Index[tank]);
-		#endif
-		
+		#endif		
 		if (L4D2Version && IsPlayerJockey(Index[tank]))
 		{
-			// WE NEED TO DISMOUNT THE JOCKEY OR ELSE BAAAAAAAAAAAAAAAD THINGS WILL HAPPEN
-			
+			// WE NEED TO DISMOUNT THE JOCKEY OR ELSE BAAAAAAAAAAAAAAAD THINGS WILL HAPPEN			
 			CheatCommand(Index[tank], "dismount");
 		}
 		
@@ -3586,24 +3589,17 @@ public Action Spawn_InfectedBot(Handle timer)
 {
 	#if DEBUG
 	PrintToServer("Spawn_InfectedBot(Handle timer)");
-	#endif
-	
+	#endif	
 	// If round has ended, we ignore this request ...
-	if (b_HasRoundEnded || !b_LeftSaveRoom ) return;
-	
-	int Infected = g_iMaxPlayerZombies;
-	
-	
-	
+	if (b_HasRoundEnded || !b_LeftSaveRoom ) return;	
+	int Infected = g_iMaxPlayerZombies;	
 	if (h_Coordination.BoolValue && !InitialSpawn && !PlayerReady())
 	{
-		BotReady++;
-		
+		BotReady++;		
 		for (int i=1;i<=MaxClients;i++)
 		{
 			// We check if player is in game
-			if (!IsClientInGame(i)) continue;
-			
+			if (!IsClientInGame(i)) continue;			
 			// Check if client is infected ...
 			if (GetClientTeam(i)==TEAM_INFECTED)
 			{
@@ -3612,7 +3608,9 @@ public Action Spawn_InfectedBot(Handle timer)
 					Infected--;
 			}
 		}
-		//PrintToChatAll("BotReady: %d, Infected,: %d, InfectedBotQueue: %d",BotReady,Infected,InfectedBotQueue);
+		//#if DEBUG
+		LogMessage("BotReady: %d, Infected: %d, InfectedBotQueue: %d",BotReady,Infected,InfectedBotQueue);
+		//#endif
 		if (BotReady >= Infected)
 		{
 			CreateTimer(3.0, BotReadyReset, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -3623,7 +3621,9 @@ public Action Spawn_InfectedBot(Handle timer)
 			if(!ThereAreNoInfectedBotsRespawnDelay()) return;
 			/*if(ThereAreNoInfectedBotsRespawnDelay() && InfectedBotQueue >= 0)
 			{
-				PrintToChatAll("try to spawn bot");
+				#if DEBUG
+				PrintToServer("try to spawn bot");
+				#endif
 				CreateTimer(0.2, Spawn_InfectedBot, _, TIMER_FLAG_NO_MAPCHANGE);
 			}
 			return;*/
@@ -4112,10 +4112,6 @@ int TrueNumberOfAliveSurvivors ()
 		if (IsClientInGame(i) && GetClientTeam(i) == TEAM_SURVIVORS && IsPlayerAlive(i))
 				TotalSurvivors++;
 	}
-	//	#if DEBUG
-	PrintToServer("[TS] TrueNumberOfAliveSurvivors %d",TotalSurvivors);
-	//	#endif
-
 	return TotalSurvivors;
 }
 
@@ -4127,9 +4123,6 @@ int TrueNumberOfAliveHumanSurvivors ()
 		if (IsClientInGame(i) && GetClientTeam(i) == TEAM_SURVIVORS && IsPlayerAlive(i) && !IsFakeClient(i))
 				TotalSurvivors++;
 	}
-	//	#if DEBUG
-	PrintToServer("[TS] TrueNumberOfAliveHumanSurvivors %d",TotalSurvivors);
-	//	#endif
 	return TotalSurvivors;
 }
 
@@ -4334,8 +4327,7 @@ public void OnPluginEnd()
 			if(IsClientInGame(i) && !IsFakeClient(i)) SendConVarValue(i, h_GameMode, mode);
 	}
 	// Destroy the persistent storage for client HUD preferences
-	delete usrHUDPref;
-	
+	delete usrHUDPref;	
 	#if DEBUG
 	PrintToServer("\x01\x04[infhud]\x01 [%f] \x03Infected HUD\x01 stopped.", GetGameTime());
 	#endif
@@ -5605,15 +5597,12 @@ int SpawnTime(bool Adjust)
 				else InfectedBotsSecondWave=0;
 			}
 		}		
-	}
-	
+	}	
 	#if DEBUG 
 	PrintToServer("[TS] g_iInfectedSpawnTimeMin %d",g_iInfectedSpawnTimeMin); 
 	PrintToServer("[TS] g_iInfectedSpawnTimeMax %d",g_iInfectedSpawnTimeMax); 
 	#endif
 	spawnTime = GetRandomInt(g_iInfectedSpawnTimeMin, g_iInfectedSpawnTimeMax);
-		
-
 	#if DEBUG 
 	PrintToServer("[TS] spawnTime GetRandomInt %d",spawnTime); 
 	#endif
@@ -5624,16 +5613,22 @@ int SpawnTime(bool Adjust)
 		PrintToServer("[TS] Adjust spawnTime x Players"); 
 		#endif
 		spawnTime = spawnTime - (iAliveSurplayers * g_iReducedSpawnTimesOnPlayer);
-	}
-	
+	}	
 	#if DEBUG 
 	PrintToServer("[TS] spawnTime -TrueNumberOfAliveHumanSurvivors %d",spawnTime); 
 	PrintToServer("[TS] InfectedBotsSecondWave %d",InfectedBotsSecondWave); 
 	PrintToServer("[TS] g_fSecondWaveRelaxTime %f",g_fSecondWaveRelaxTime); 
 	PrintToServer("[TS] g_fSecondWaveRelaxTimeScale %f",g_fSecondWaveRelaxTimeScale); 
+	PrintToServer("[TS] g_fSecondWaveFinalRelaxTime %f",g_fSecondWaveFinalRelaxTime); 
+	PrintToServer("[TS] g_fSecondWaveFinalRelaxTimeScale %f",g_fSecondWaveFinalRelaxTimeScale); 
 	#endif
 	if (InfectedBotsSecondWave) 
-		spawnTime=RoundFloat(float(spawnTime)*g_fSecondWaveRelaxTime/g_fSecondWaveRelaxTimeScale);
+	{
+		if (FinaleStarted)
+			spawnTime=RoundFloat(float(spawnTime)*g_fSecondWaveFinalRelaxTime/g_fSecondWaveFinalRelaxTimeScale);
+		else
+			spawnTime=RoundFloat(float(spawnTime)*g_fSecondWaveRelaxTime/g_fSecondWaveRelaxTimeScale);
+	}
 	//#if DEBUG 
 	PrintToServer("[TS] spawnTime %d, InfectedBotsSecondWave %d",spawnTime,InfectedBotsSecondWave); 
 	//#endif	

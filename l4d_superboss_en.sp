@@ -2,6 +2,10 @@
 #pragma newdecls required
 #include <sourcemod>
 #include <sdktools>
+#tryinclude <morecolors> // Morecolors defines a max buffer as well as bytebuffer but bytebuffer does if defined check
+#if !defined _colors_included
+	#include <multicolors>
+#endif
 
 #define PLUGIN_VERSION "1.0.1"
 
@@ -35,7 +39,8 @@ ConVar 	l4d_super_probability[9],
 		l4d_invisible_alpha, 
 		l4d_superboss_print, 
 		l4d_invisible_print, 
-		l4d_superboss_enable, 
+		l4d_superboss_enable,
+l4d_superboss_invisible_enable,		
 		l4d_invisible_enable;
 
 int		GameMode, L4D2Version;
@@ -50,10 +55,13 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
+	LoadTranslations("l4d_superboss.phrases");
+	
 	GameCheck(); 	
 	bossname[ZOMBIECLASS_TANK] = "tank";
 	
 	l4d_superboss_enable = CreateConVar("l4d_superboss_enable", "1", "super infected 0:disable, 1:eanble", FCVAR_NOTIFY);
+	l4d_superboss_invisible_enable = CreateConVar("l4d_superboss_invisible_enable", "1", "super invisible infected 0:disable, 1:eanble", FCVAR_NOTIFY);
 	l4d_invisible_enable = CreateConVar("l4d_invisible_enable", "1", "invisible infected 0:disable, 1:eanble", FCVAR_NOTIFY);
 
  	l4d_superboss_print = CreateConVar("l4d_superboss_print", "1", "print message when super infected spawn, 0:disable, 1:enable", FCVAR_NOTIFY);
@@ -189,13 +197,18 @@ public Action CreatesuperBoss(Handle timer, any client)
 
 		SetEntityRenderMode(client, view_as<RenderMode>(3));
 		int c1 = GetRandomInt(0, 255), c2 = GetRandomInt(0, 255), c3 = GetRandomInt(0, 255);
-		SetEntityRenderColor(client, c1, c2, c3, 255);
+		
+		if (l4d_superboss_invisible_enable.IntValue != 0)
+			SetEntityRenderColor(client, c1, c2, c3, 255);
+		else
+			SetEntityRenderColor(client, c1, c2, c3, l4d_invisible_alpha.IntValue);
+	
 
 		if(l4d_superboss_print.IntValue > 0)
 		{
 			char hintmsg[165];
-			Format(hintmsg, sizeof(hintmsg), "\x03super\x04 %s \x03spawn", bossname[class]);	
-			PrintToChatAll("%s ", hintmsg);
+			Format(hintmsg, sizeof(hintmsg), "%t", "SuperBoss Spawn", bossname[class]);	
+			CPrintToChatAll("%s ", hintmsg);
 		}
 	}
 	return;
@@ -210,9 +223,9 @@ public Action CreateInvisibleBoss(Handle timer, any client)
 		SetEntityRenderColor(client, 255, 255, 255, l4d_invisible_alpha.IntValue);			
 		if(l4d_invisible_print.IntValue > 0)
 		{
-			char hintmsg[165];	
-			Format(hintmsg, sizeof(hintmsg), "\x03invisible\x04 %s \x03spawn", bossname[class]);
-			PrintToChatAll("%s ", hintmsg);
+			char hintmsg[165];
+			Format(hintmsg, sizeof(hintmsg), "%t", "Invisible Spawn", bossname[class]);	
+			CPrintToChatAll("%s ", hintmsg);
 		}
 	}
 	return;
