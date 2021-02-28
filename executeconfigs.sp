@@ -189,7 +189,7 @@ public void OnPluginStart()
     StartPrepSDKCall(SDKCall_Player);
     if (!PrepSDKCall_SetFromConf(hGameConf, SDKConf_Signature, "IsStaggering"))
     SetFailState("[aidmgfix] Could not find signature IsStaggering.");
-    PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
+    PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);	
     hIsStaggering = EndPrepSDKCall();
     if (hIsStaggering == INVALID_HANDLE)
     SetFailState("[aidmgfix] Failed to load signature IsStaggering");
@@ -447,8 +447,6 @@ public Action Timer_ExecAMovementReader(Handle timer,int target)
 		{					
 			int anim;	
 			anim=clientAnim[target];
-			
-			
 			bool validAnimation = false;
 			int validAnims[1939];
 			validAnims[1]=10;
@@ -475,7 +473,7 @@ public Action Timer_ExecAMovementReader(Handle timer,int target)
 			}	
 			*/
 			
-			if (validAnimation)
+			if (!validAnimation)
 			{
 				ServerCommand("st_mr_stop %d",target);
 				#if DEBUG
@@ -635,10 +633,37 @@ bool isCorrectPositionsandHaveCorrectWeapons()
 								*/								
 								//if (!g_bStagger[clientinpos1])
 								//{		
+							
 								int anim;	
 								anim=clientAnim[target];
+								bool validAnimation = false;
+								int validAnims[1939];
+								validAnims[1]=10;
+								validAnims[2]=14;			
+								for (int validation = 1; validation <= 1939; validation++)
+								{
+									if (anim==validAnims[validation])
+									{
+										validAnimation=true;
+									}				
+								}		
+								
+								/*
+								bool validAnimation = true;
+								int invalidAnims[1939];
+								invalidAnims[1]=10;
+								invalidAnims[2]=12;			
+								for (int validation = 1; validation <= 1939; validation++)
+								{
+									if (anim==invalidAnims[validation])
+									{
+										validAnimation=false;
+									}				
+								}	
+								*/
 								//if ((anim != 515)||(anim != 520)||!((anim >= 973)&&(anim <= 982))||!((anim >= 987)&&(anim <= 1008)))
-								if ((anim != 972)||(anim != 974)||!((anim >= 10)&&(anim <= 11))||(anim != 14)||(anim != 85)||(anim != 97)||!((anim >= 109)&&(anim <= 110))||!((anim >= 131)&&(anim <= 133))||!((anim >= 312)&&(anim <= 323))||!((anim >= 325)&&(anim <= 326))||(anim != 332)||!((anim >= 334)&&(anim <= 335))||!((anim >= 338)&&(anim <= 350))||!((anim >= 351)&&(anim <= 378))||!((anim >= 512)&&(anim <= 520))||(anim != 520)||(anim != 942)||!((anim >= 946)&&(anim <= 974))||((anim >= 976)&&(anim <= 980))||!((anim >= 983)&&(anim <= 989))||!((anim >= 991)&&(anim <= 994))||!((anim >= 997)&&(anim <= 1002))||!((anim >= 1004)&&(anim <= 1006))||!((anim >= 1009)&&(anim <= 1011))||!((anim >= 1013)&&(anim <= 1017))||!((anim >= 1020)&&(anim <= 1021))||!((anim >= 1023)&&(anim <= 1027))||!((anim >= 1030)&&(anim <= 1034))||!((anim >= 1037)&&(anim <= 1041))||!((anim >= 1045)&&(anim <= 1051))||!((anim >= 1053)&&(anim <= 1055))||!((anim >= 1058)&&(anim <= 1063))||!((anim >= 1067)&&(anim <= 1076))||!((anim >= 1080)&&(anim <= 1092))||!((anim >= 1094)&&(anim <= 1096))||!((anim >= 1098)&&(anim <= 1102))||!((anim >= 1104)&&(anim <= 1106))||!((anim >= 1108)&&(anim <= 1112))||!((anim >= 1114)&&(anim <= 1118))||!((anim >= 1121)&&(anim <= 1137))||!((anim >= 1139)&&(anim <= 1140))||(anim != 1142)||!((anim >= 1144)&&(anim <= 1159))||!((anim >= 1161)&&(anim <= 1162))||(anim != 1164)||!((anim >= 1166)&&(anim <= 1185))||!((anim >= 1187)&&(anim <= 1188))||(anim != 1190)||!((anim >= 1192)&&(anim <= 1207))||!((anim >= 1209)&&(anim <= 1210))||(anim != 1212)||!((anim >= 1214)&&(anim <= 1223))||(anim != 1225)||!((anim >= 1227)&&(anim <= 1239))||!((anim >= 1241)&&(anim <= 1242))||(anim != 1244)||!((anim >= 1246)&&(anim <= 1249)))
+								//if ((anim != 972)||(anim != 974)||!((anim >= 10)&&(anim <= 11))||(anim != 14)||(anim != 85)||(anim != 97)||!((anim >= 109)&&(anim <= 110))||!((anim >= 131)&&(anim <= 133))||!((anim >= 312)&&(anim <= 323))||!((anim >= 325)&&(anim <= 326))||(anim != 332)||!((anim >= 334)&&(anim <= 335))||!((anim >= 338)&&(anim <= 350))||!((anim >= 351)&&(anim <= 378))||!((anim >= 512)&&(anim <= 520))||(anim != 520)||(anim != 942)||!((anim >= 946)&&(anim <= 974))||((anim >= 976)&&(anim <= 980))||!((anim >= 983)&&(anim <= 989))||!((anim >= 991)&&(anim <= 994))||!((anim >= 997)&&(anim <= 1002))||!((anim >= 1004)&&(anim <= 1006))||!((anim >= 1009)&&(anim <= 1011))||!((anim >= 1013)&&(anim <= 1017))||!((anim >= 1020)&&(anim <= 1021))||!((anim >= 1023)&&(anim <= 1027))||!((anim >= 1030)&&(anim <= 1034))||!((anim >= 1037)&&(anim <= 1041))||!((anim >= 1045)&&(anim <= 1051))||!((anim >= 1053)&&(anim <= 1055))||!((anim >= 1058)&&(anim <= 1063))||!((anim >= 1067)&&(anim <= 1076))||!((anim >= 1080)&&(anim <= 1092))||!((anim >= 1094)&&(anim <= 1096))||!((anim >= 1098)&&(anim <= 1102))||!((anim >= 1104)&&(anim <= 1106))||!((anim >= 1108)&&(anim <= 1112))||!((anim >= 1114)&&(anim <= 1118))||!((anim >= 1121)&&(anim <= 1137))||!((anim >= 1139)&&(anim <= 1140))||(anim != 1142)||!((anim >= 1144)&&(anim <= 1159))||!((anim >= 1161)&&(anim <= 1162))||(anim != 1164)||!((anim >= 1166)&&(anim <= 1185))||!((anim >= 1187)&&(anim <= 1188))||(anim != 1190)||!((anim >= 1192)&&(anim <= 1207))||!((anim >= 1209)&&(anim <= 1210))||(anim != 1212)||!((anim >= 1214)&&(anim <= 1223))||(anim != 1225)||!((anim >= 1227)&&(anim <= 1239))||!((anim >= 1241)&&(anim <= 1242))||(anim != 1244)||!((anim >= 1246)&&(anim <= 1249)))
+								if (!validAnimation)
 								{
 									#if DEBUG
 									PrintToChatAll("clientinpos1 Animacion INCorrecta");
@@ -700,7 +725,32 @@ bool isCorrectPositionsandHaveCorrectWeapons()
 							//{
 							int anim;	
 							anim=clientAnim[target];
-							if (!((anim >= 10)&&(anim <= 11))||(anim != 14)||(anim != 85)||(anim != 97)||!((anim >= 109)&&(anim <= 110))||!((anim >= 131)&&(anim <= 133))||!((anim >= 312)&&(anim <= 323))||!((anim >= 325)&&(anim <= 326))||(anim != 332)||!((anim >= 334)&&(anim <= 335))||!((anim >= 338)&&(anim <= 350))||!((anim >= 351)&&(anim <= 378))||!((anim >= 512)&&(anim <= 520))||(anim != 520)||(anim != 942)||!((anim >= 946)&&(anim <= 974))||((anim >= 976)&&(anim <= 980))||!((anim >= 983)&&(anim <= 989))||!((anim >= 991)&&(anim <= 994))||!((anim >= 997)&&(anim <= 1002))||!((anim >= 1004)&&(anim <= 1006))||!((anim >= 1009)&&(anim <= 1011))||!((anim >= 1013)&&(anim <= 1017))||!((anim >= 1020)&&(anim <= 1021))||!((anim >= 1023)&&(anim <= 1027))||!((anim >= 1030)&&(anim <= 1034))||!((anim >= 1037)&&(anim <= 1041))||!((anim >= 1045)&&(anim <= 1051))||!((anim >= 1053)&&(anim <= 1055))||!((anim >= 1058)&&(anim <= 1063))||!((anim >= 1067)&&(anim <= 1076))||!((anim >= 1080)&&(anim <= 1092))||!((anim >= 1094)&&(anim <= 1096))||!((anim >= 1098)&&(anim <= 1102))||!((anim >= 1104)&&(anim <= 1106))||!((anim >= 1108)&&(anim <= 1112))||!((anim >= 1114)&&(anim <= 1118))||!((anim >= 1121)&&(anim <= 1137))||!((anim >= 1139)&&(anim <= 1140))||(anim != 1142)||!((anim >= 1144)&&(anim <= 1159))||!((anim >= 1161)&&(anim <= 1162))||(anim != 1164)||!((anim >= 1166)&&(anim <= 1185))||!((anim >= 1187)&&(anim <= 1188))||(anim != 1190)||!((anim >= 1192)&&(anim <= 1207))||!((anim >= 1209)&&(anim <= 1210))||(anim != 1212)||!((anim >= 1214)&&(anim <= 1223))||(anim != 1225)||!((anim >= 1227)&&(anim <= 1239))||!((anim >= 1241)&&(anim <= 1242))||(anim != 1244)||!((anim >= 1246)&&(anim <= 1249)))
+							bool validAnimation = false;
+							int validAnims[1939];
+							validAnims[1]=10;
+							validAnims[2]=14;			
+							for (int validation = 1; validation <= 1939; validation++)
+							{
+								if (anim==validAnims[validation])
+								{
+									validAnimation=true;
+								}				
+							}		
+							
+							/*
+							bool validAnimation = true;
+							int invalidAnims[1939];
+							invalidAnims[1]=10;
+							invalidAnims[2]=12;			
+							for (int validation = 1; validation <= 1939; validation++)
+							{
+								if (anim==invalidAnims[validation])
+								{
+									validAnimation=false;
+								}				
+							}	
+							*/
+							if (!validAnimation)
 							{
 								#if DEBUG
 								PrintToChatAll("clientinpos2 Animacion INCorrecta");
