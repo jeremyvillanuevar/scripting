@@ -517,7 +517,7 @@ native void DisplayBuiltinVotePass2(Handle vote, char[] translation, char[] para
  * 
  * @param reason			Vote failure reason from BuiltinVoteFailed enum
  */
-native void DisplayBuiltinVoteFail(Handle vote, BuiltinVoteFailReason reason=BuiltinVoteFail_Generic);
+native BuiltinVoteActionHandler DisplayBuiltinVoteFail(Handle vote, BuiltinVoteFailReason reason=BuiltinVoteFail_Generic);
 
 /**
  * Quick stock to determine whether voting is allowed.  This doesn't let you 
