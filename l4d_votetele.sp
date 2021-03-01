@@ -85,6 +85,7 @@ bool g_bVoteDisplayed;
 
 float g_fDestPos[3];
 int g_iInitiator;
+int g_iGotoFriend;
 int g_iTankCount;
 int g_iVoteCommand = 1;
 
@@ -120,7 +121,11 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_traeramigos", Command_Votetele);
 	RegConsoleCmd("sm_noobs", Command_Votetele);
 	RegConsoleCmd("sm_noob", Command_Votetele);
+	RegConsoleCmd("sm_tpall", Command_Votetele);
+	
 	RegConsoleCmd("sm_stuck", Command_Unstuck);
+	
+	RegConsoleCmd("sm_tp", Command_VoteGotoF);
 	RegConsoleCmd("sm_acercarseaamigos", Command_VoteGotoF);
 	RegConsoleCmd("sm_acercarse", Command_VoteGotoF);
 	RegConsoleCmd("sm_acercar", Command_VoteGotoF);
@@ -237,17 +242,71 @@ public Action Command_Votetele(int client, int args)
 
 public Action Command_VoteGotoF(int client, int args)
 {
-	g_iVoteCommand =2;//Command_VoteGotoF
+		
+	if(args < 1)//tp sin argumentos
+	{		
+		if(client != 0)
+		{			
+			if (StartVoteAccessCheck(client))
+			{				
+				g_iVoteCommand =2;//Command_VoteGotoF	
+				g_iInitiator = client;
+				GetClientAbsOrigin(client, g_fDestPos);
+				StartVoteTele(client);
+			}
+		}
+		//Return:
+		return Plugin_Handled;
+	}
+	
+	//tp con argumentos
+	
+	//Declare:
+	int player;
+	char playerName[32], name[32];
+	
+	//Initialize:
+	player = -1;
+	GetCmdArg(1, playerName, sizeof(playerName));
+	
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		//Connected:
+		if(IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i))
+		{			
+			//Initialize:
+			GetClientName(i, name, sizeof(name));
+
+			//Save:
+			if(StrContains(name, playerName, false) != -1) player = i;
+		}
+	}
+		
+	
+	//Invalid Name:
+	if(player == -1)
+	{
+		//Print:
+		PrintToConsole(client, "No se encontró al jugador \x04%s", playerName);
+		//Return:
+		return Plugin_Handled;
+	}
+		
 	if(client != 0)
 	{
 		if (StartVoteAccessCheck(client))
 		{
+			g_iVoteCommand =3;//Command_VoteGotoF				
 			g_iInitiator = client;
+			g_iGotoFriend=player;
 			GetClientAbsOrigin(client, g_fDestPos);
 			StartVoteTele(client);
 		}
 	}
+	
+	//Return:
 	return Plugin_Handled;
+	
 }
 
 bool StartVoteAccessCheck(int client)
@@ -262,14 +321,17 @@ bool StartVoteAccessCheck(int client)
 	if (HasOverrideAccess(client)) {
 		LogVoteAction(client, "[FORCE-TELEPORTED]");
 		g_iInitiator = client;
-		GetClientAbsOrigin(client, g_fDestPos);
 		if (g_iVoteCommand==1)
 		{
 			MakeTeleport();
 		}
 		if (g_iVoteCommand==2)
 		{
-			MakeGotoAhead(g_iInitiator);
+			MakeGotoAhead();
+		}
+		if (g_iVoteCommand==3)
+		{
+			MakeGotoFriend();
 		}
 		return false;
 	}
@@ -379,8 +441,14 @@ void StartVoteTele(int client)
 		LogVoteAction(client, "[STARTED] VOTEGOTOF by");
 		CPrintToChatAll("%t", "vote_started_gotof", client);
 		PrintToServer("Vote for teleporting is started by: %N", client);
-		PrintToConsoleAll("Vote for teleporting is started by: %N", client);
-	
+		PrintToConsoleAll("Vote for teleporting is started by: %N", client);	
+	}
+	if (g_iVoteCommand==3)
+	{
+		LogVoteAction(client, "[STARTED] VOTEGOTOF by");
+		CPrintToChatAll("%t", "vote_started_gotofriend", client);
+		PrintToServer("Vote for teleporting is started by: %N", client);
+		PrintToConsoleAll("Vote for teleporting is started by: %N", client);	
 	}
 	g_bVotepass = false;
 	g_bVeto = false;
@@ -395,6 +463,10 @@ void StartVoteTele(int client)
 	if (g_iVoteCommand==2)
 	{
 		CPrintHintTextToAll("%t", "vote_started_gotof_announce");
+	}	
+	if (g_iVoteCommand==3)
+	{
+		CPrintHintTextToAll("%t", "vote_started_gotofriend_announce");
 	}	
 }
 
@@ -456,6 +528,10 @@ public int Handle_Votetele(Menu menu, MenuAction action, int param1, int param2)
 			{
 				Format(buffer, sizeof(buffer), "%T", "vote_started_gotof_announce", param1); // "Do you want to teleport noobs?"
 			}	
+			if (g_iVoteCommand==3)
+			{
+				Format(buffer, sizeof(buffer), "%T", "vote_started_gotofriend_announce", param1); // "Do you want to teleport noobs?"
+			}	
 			menu.SetTitle(buffer);
 		}
 	}
@@ -467,12 +543,18 @@ void Handler_PostVoteAction(bool bVoteSuccess)
 	if (bVoteSuccess) {
 		if (g_iVoteCommand==1)
 		{	
+			GetClientAbsOrigin(g_iInitiator, g_fDestPos);
 			MakeTeleport();
 			LogVoteAction(0, "[TELEPORTED]");
 		}
 		if (g_iVoteCommand==2)
 		{	
-			MakeGotoAhead(g_iInitiator);
+			MakeGotoAhead();
+			LogVoteAction(0, "[GOTOF]");
+		}
+		if (g_iVoteCommand==3)
+		{	
+			MakeGotoFriend();
 			LogVoteAction(0, "[GOTOF]");
 		}
 		CPrintToChatAll("%t", "vote_success");
@@ -486,8 +568,7 @@ void Handler_PostVoteAction(bool bVoteSuccess)
 
 void MakeTeleport()
 {
-	float vPos[3], vDest[3];
-	
+	float vPos[3], vDest[3];	
 	for (int i = 1; i <= MaxClients; i++) {
 		if (g_iInitiator != i && IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i)) {
 			GetClientAbsOrigin(i, vPos);
@@ -501,8 +582,28 @@ void MakeTeleport()
 	}
 }
 
-void MakeGotoAhead(int client)
+void MakeGotoFriend()
 {
+	int client=g_iInitiator;
+	float vPos[3], vDest[3];
+	if (IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client)) {
+		//Initialize
+		GetClientAbsOrigin(client, vPos);
+		GetClientAbsOrigin(g_iGotoFriend, g_fDestPos);		
+		if (IsClientStuck(client) || GetVectorDistance(vPos, g_fDestPos) > g_hCvarMaxDist.FloatValue) {
+			//Math
+			vDest[0] = g_fDestPos[0] + GetRandomFloat(0.0, 5.0);
+			vDest[1] = g_fDestPos[1] + GetRandomFloat(0.0, 5.0);
+			vDest[2] = g_fDestPos[2];
+			//Teleport
+			TeleportEntity(client, vDest, NULL_VECTOR, NULL_VECTOR);
+		}
+	}	
+}
+
+void MakeGotoAhead()
+{
+	int client=g_iInitiator;
 	float vPos[3], vDest[3];
 	if (IsClientInGame(client) && GetClientTeam(client) == 2 && IsPlayerAlive(client)) {
 		//Initialize
@@ -516,12 +617,7 @@ void MakeGotoAhead(int client)
 			//Teleport
 			TeleportEntity(client, vDest, NULL_VECTOR, NULL_VECTOR);
 		}
-	}
-
-	
-			
-	
-	
+	}	
 }
 
 bool IsClientStuck(int iClient)
