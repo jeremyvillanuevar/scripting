@@ -227,13 +227,12 @@ public Action Command_Votepass(int client, int args)
 
 public Action Command_Votetele(int client, int args)
 {
-	g_iVoteCommand =1;//Command_Votetele
 	if(client != 0)
 	{
+		g_iInitiator = client;
+		g_iVoteCommand =1;//Command_Votetele
 		if (StartVoteAccessCheck(client))
 		{
-			g_iInitiator = client;
-			GetClientAbsOrigin(client, g_fDestPos);
 			StartVoteTele(client);
 		}
 	}
@@ -247,11 +246,10 @@ public Action Command_VoteGotoF(int client, int args)
 	{		
 		if(client != 0)
 		{			
+			g_iVoteCommand =2;//Command_VoteGotoF	
+			g_iInitiator = client;
 			if (StartVoteAccessCheck(client))
 			{				
-				g_iVoteCommand =2;//Command_VoteGotoF	
-				g_iInitiator = client;
-				GetClientAbsOrigin(client, g_fDestPos);
 				StartVoteTele(client);
 			}
 		}
@@ -294,12 +292,11 @@ public Action Command_VoteGotoF(int client, int args)
 		
 	if(client != 0)
 	{
+		g_iVoteCommand =3;//Command_VoteGotoF
+		g_iInitiator = client;
+		g_iGotoFriend=player;
 		if (StartVoteAccessCheck(client))
 		{
-			g_iVoteCommand =3;//Command_VoteGotoF				
-			g_iInitiator = client;
-			g_iGotoFriend=player;
-			GetClientAbsOrigin(client, g_fDestPos);
 			StartVoteTele(client);
 		}
 	}
@@ -320,7 +317,6 @@ bool StartVoteAccessCheck(int client)
 	
 	if (HasOverrideAccess(client)) {
 		LogVoteAction(client, "[FORCE-TELEPORTED]");
-		g_iInitiator = client;
 		if (g_iVoteCommand==1)
 		{
 			MakeTeleport();
@@ -543,7 +539,6 @@ void Handler_PostVoteAction(bool bVoteSuccess)
 	if (bVoteSuccess) {
 		if (g_iVoteCommand==1)
 		{	
-			GetClientAbsOrigin(g_iInitiator, g_fDestPos);
 			MakeTeleport();
 			LogVoteAction(0, "[TELEPORTED]");
 		}
@@ -568,6 +563,7 @@ void Handler_PostVoteAction(bool bVoteSuccess)
 
 void MakeTeleport()
 {
+	GetClientAbsOrigin(g_iInitiator, g_fDestPos);
 	float vPos[3], vDest[3];	
 	for (int i = 1; i <= MaxClients; i++) {
 		if (g_iInitiator != i && IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i)) {

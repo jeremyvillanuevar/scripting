@@ -306,8 +306,8 @@ public Action TimerBalancer(Handle timer)
 		if(g_iLimitInfected[i] == -1){
 			continue;
 		}
-		IntToString(g_iLimitInfected[i], dvalue, sizeof(dvalue));
-		SetDirectorVar(g_sInfectedLimit[i], dvalue);
+		IntToString(g_iLimitInfected[i], dvalue, sizeof(dvalue));		
+		SetDirectorVar(g_sInfectedLimit[i], dvalue);//ex: 1=CommonLimit,9=TankLimit
 		//if(DEBUG)PrintToChatAll("%s: %s",g_sInfectedLimit[i], dvalue);
 	}
 	return Plugin_Continue;
