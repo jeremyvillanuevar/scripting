@@ -107,6 +107,7 @@
 #define GAMEDATA				"vscript_replacer"
 #define CONFIG_DATA				"data/vscripts_override.cfg"
 #define MAX_STRING_LENGTH		8192
+#define DEBUG		0
 
 Handle g_hForwardOnVScript;
 StringMap gOverrideCustom;		// "override" script names.
@@ -453,11 +454,8 @@ public MRESReturn VScriptServerCompileScript(Handle hReturn, Handle hParams)
 	DHookGetParamString(hParams, 1, pszScriptName, sizeof(pszScriptName));
 	//StrToLowerCase(pszScriptName, pszScriptName, sizeof(pszScriptName));
 
-	// Listen
-	if( g_bListen ) PrintToServer("--- VSCRIPT: Exec: <%s>", pszScriptName);
 	ReplaceString(pszScriptName, sizeof(pszScriptName), ".nut", "", false);
-	if( g_bListen ) PrintToServer("--- VSCRIPT: Exec: <%s>", pszScriptName);
-	
+		
 	// Match overrides
 	int index = gOverrideScripts.FindString(pszScriptName);
 	if( index != -1 )
@@ -630,8 +628,9 @@ void SaveOverrides()
 	{
 		// Script filename
 		gOverrideConfig.GetString(x, sFile, sizeof(sFile));
+		#if DEBUG
 		PrintToServer("--- VSCRIPT: Replacer File: %s.", sFile);
-
+		#endif
 		// Check for "override" key in each scripts values from config.
 		aHand = gOverrideValues.Get(x);
 
@@ -648,8 +647,10 @@ void SaveOverrides()
 				//StrToLowerCase(sPath, sPath, sizeof(sPath));
 				gOverrideCustom.SetString(sFile, sPath);
 
+				#if DEBUG
 				PrintToServer("--- VSCRIPT: Replacer Path: %s.", sPath);
-		
+				#endif
+				
 				// Save to vscripts/vscripts_override folder
 				strcopy(sTemp, sizeof(sTemp), sFile);
 				Format(sPath, sizeof(sPath), "scripts/vscripts/vscripts_custom/%s.nut", sPath);
@@ -878,7 +879,7 @@ void SaveFile(ArrayList aHand, const char[] sFile, const char[] filename, bool I
 		if( gOverrideScripts.FindString(sFile) == -1 )
 		{
 			gOverrideScripts.PushString(sFile);
-			hFile.WriteString("//--------------------------------------------------\n// This file is auto generated do not hand edit!\n//--------------------------------------------------\n\n", false);
+		//	hFile.WriteString("//--------------------------------------------------\n// This file is auto generated do not hand edit!\n//--------------------------------------------------\n\n", false);
 		}
 	}
 
@@ -1029,7 +1030,9 @@ public SMCResult Config_NewSection(Handle parser, const char[] section, bool quo
 {
 	g_iSectionLevel++;
 
+	#if DEBUG
 	PrintToServer("--- VSCRIPT: section: <%s>", section);
+	#endif
 	static char sMap[PLATFORM_MAX_PATH];
 	sMap[0] = 0;
 
@@ -1052,7 +1055,9 @@ public SMCResult Config_NewSection(Handle parser, const char[] section, bool quo
 	{
 		//StrToLowerCase(section, sMap, sizeof(sMap));
 		strcopy(sMap, PLATFORM_MAX_PATH,section);
+		#if DEBUG
 		PrintToServer("--- VSCRIPT: sMap: <%s>", sMap);
+		#endif
 		// Unique
 		if( gOverrideConfig.FindString(sMap) == -1 )
 		{
@@ -1073,9 +1078,10 @@ public SMCResult Config_NewSection(Handle parser, const char[] section, bool quo
 
 public SMCResult Config_KeyValue(Handle parser, const char[] key, const char[] value, bool key_quotes, bool value_quotes)
 {
+	#if DEBUG
 	PrintToServer("--- VSCRIPT: key: <%s>", key);
 	PrintToServer("--- VSCRIPT: value: <%s>", value);
-	
+	#endif
 	if( g_bAllowSection )
 	{
 		if( g_iSectionLevel == 3 )
