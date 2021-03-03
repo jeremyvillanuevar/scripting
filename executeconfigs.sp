@@ -210,9 +210,12 @@ public Action L4D2_OnStagger(int target, int source)
 */
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
+	#if DEBUG
+	PrintToChatAll("Event_RoundEnd");
+	#endif		
 	for( int i = 1; i <= MaxClients; i++ )
 	{
-		AnimHookDisable(i, OnAnim, OnAnimPost);
+		AnimHookDisable(i, OnAnim);
 	}
 
 }
@@ -286,36 +289,42 @@ public Action Command_Anim(int args)
  */
 public void Event_GameStart(Event event, const char[] name, bool dontBroadcast)
 {
+	#if DEBUG
+	PrintToChatAll("Event_GameStart");
+	#endif		
 	g_iRound = 0;
 }
 
 public void Event_Hook(Event event, const char[] name, bool dontBroadcast)
 {
+	#if DEBUG
+	PrintToChatAll("Event_Hook");
+	#endif		
 	if (g_hEnabled.BoolValue)
 		ExecConfig(EVENT, name);
 }
 
 public void player_spawn(Event event, const char[] name, bool dontBroadcast)
 {
+	#if DEBUG
+	PrintToChatAll("player_spawn");
+	#endif		
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if(IsValidClient(client) && GetClientTeam(client) == 2)
-		AnimHookEnable(client, OnAnim, OnAnimPost);
+		AnimHookEnable(client, OnAnim);
 }
 
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
+	#if DEBUG
+	PrintToChatAll("Event_RoundStart");
+	#endif		
 	g_iRound++;
-
 	if (!g_hEnabled.BoolValue)
 		return;
-
 	char sRound[4];
 	IntToString(g_iRound, sRound, sizeof(sRound));
-	ExecConfig(ROUND, sRound);
-	
-	
-		
-		
+	ExecConfig(ROUND, sRound);			
 }
 
 
@@ -1078,10 +1087,10 @@ Action OnAnim(int client, int &anim)
 	//return Plugin_Continue;
 }
 
+	/*
 // Uses "m_nSequence" animation numbers, which are different for each model.
 Action OnAnimPost(int client, int &anim)
 {
-	/*
 	if( g_bCrawling )
 	{
 		static char model[40];
@@ -1099,7 +1108,8 @@ Action OnAnimPost(int client, int &anim)
 		}
 		return Plugin_Changed;
 	}
-	// */
+	// 
 
 	return Plugin_Continue;
 }
+*/

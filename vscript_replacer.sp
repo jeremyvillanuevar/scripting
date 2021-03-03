@@ -107,7 +107,7 @@
 #define GAMEDATA				"vscript_replacer"
 #define CONFIG_DATA				"data/vscripts_override.cfg"
 #define MAX_STRING_LENGTH		8192
-#define DEBUG		0
+#define DEBUG	0
 
 Handle g_hForwardOnVScript;
 StringMap gOverrideCustom;		// "override" script names.
@@ -211,11 +211,15 @@ public void OnPluginStart()
 	RegAdminCmd("sm_vs_list",			CmdList,		ADMFLAG_ROOT, "Show data config tree of modified scripts for the current map.");
 	RegAdminCmd("sm_vs_listen",			CmdListen,		ADMFLAG_ROOT, "Toggle printing to server console the names of scripts being executed.");
 	RegAdminCmd("sm_vs_reload",			CmdReload,		ADMFLAG_ROOT, "Reloads the data config. This also replaces files in the override folder.");
+	
+	
+	
 }
 
 public void OnMapStart()
 {
 	if( g_bLoadNewMap ) ResetPlugin();
+	
 }
 
 public void OnMapEnd()
@@ -423,7 +427,6 @@ public Action CmdReload(int client, int args)
 public Action CmdListen(int client, int args)
 {
 	g_bListen = !g_bListen;
-
 	if( client )
 	{
 		if( g_bListen )
@@ -465,7 +468,7 @@ public MRESReturn VScriptServerCompileScript(Handle hReturn, Handle hParams)
 		else
 			Format(pszScriptOverride, sizeof(pszScriptOverride), "vscripts_override/%s", pszScriptName);
 
-		if( g_bListen ) PrintToServer("--- VSCRIPT: Overriding script: <%s> <%s>", pszScriptName, pszScriptOverride);
+		if( g_bListen ) PrintToChatAll("--- VSCRIPT: Overriding script: <%s> <%s>", pszScriptName, pszScriptOverride);
 
 		strcopy(pszScriptFwd, sizeof(pszScriptFwd), pszScriptOverride);
 
@@ -480,14 +483,14 @@ public MRESReturn VScriptServerCompileScript(Handle hReturn, Handle hParams)
 		{
 			case Plugin_Handled:
 			{
-				if( g_bListen ) PrintToServer("--- VSCRIPT: FWD blocked override script: <%s> <%s>", pszScriptName, pszScriptOverride);
+				if( g_bListen ) PrintToChatAll("--- VSCRIPT: FWD blocked override script: <%s> <%s>", pszScriptName, pszScriptOverride);
 				DHookSetReturn(hReturn, 0);
 				return MRES_Supercede;
 			}
 
 			case Plugin_Changed:
 			{
-				if( g_bListen ) PrintToServer("--- VSCRIPT: FWD changed override script: <%s> <%s> to <%s>", pszScriptName, pszScriptOverride, pszScriptFwd);
+				if( g_bListen ) PrintToChatAll("--- VSCRIPT: FWD changed override script: <%s> <%s> to <%s>", pszScriptName, pszScriptOverride, pszScriptFwd);
 				strcopy(pszScriptOverride, sizeof(pszScriptOverride), pszScriptFwd);
 			}
 		}
@@ -506,14 +509,14 @@ public MRESReturn VScriptServerCompileScript(Handle hReturn, Handle hParams)
 		{
 			case Plugin_Handled:
 			{
-				if( g_bListen ) PrintToServer("--- VSCRIPT: FWD blocked script: <%s>", pszScriptName);
+				if( g_bListen ) PrintToChatAll("--- VSCRIPT: FWD blocked script: <%s>", pszScriptName);
 				DHookSetReturn(hReturn, 0);
 				return MRES_Supercede;
 			}
 
 			case Plugin_Changed:
 			{
-				if( g_bListen ) PrintToServer("--- VSCRIPT: FWD changed script: <%s> to <%s>", pszScriptName, pszScriptOverride);
+				if( g_bListen ) PrintToChatAll("--- VSCRIPT: FWD changed script: <%s> to <%s>", pszScriptName, pszScriptOverride);
 				DHookSetParamString(hParams, 1, pszScriptOverride);
 				return MRES_ChangedHandled;
 			}
@@ -521,7 +524,7 @@ public MRESReturn VScriptServerCompileScript(Handle hReturn, Handle hParams)
 	}
 
 	// Listen
-	if( g_bListen ) PrintToServer("--- VSCRIPT: Exec: <%s>", pszScriptName);
+	if( g_bListen ) PrintToChatAll("--- VSCRIPT: Exec: <%s>", pszScriptName);
 
 	return MRES_Ignored;
 }
