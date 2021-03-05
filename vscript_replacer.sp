@@ -450,23 +450,35 @@ public MRESReturn VScriptServerCompileScript(Handle hReturn, Handle hParams)
 	// Get script name
 	static char pszScriptOverride[PLATFORM_MAX_PATH];
 	static char pszScriptName[PLATFORM_MAX_PATH];
+	static char pszScriptNameLowerCase[PLATFORM_MAX_PATH];
 	static char pszScriptFwd[PLATFORM_MAX_PATH];
 	pszScriptOverride[0] = 0;
 	pszScriptFwd[0] = 0;
 
-	DHookGetParamString(hParams, 1, pszScriptName, sizeof(pszScriptName));
-	//StrToLowerCase(pszScriptName, pszScriptName, sizeof(pszScriptName));
-
 	ReplaceString(pszScriptName, sizeof(pszScriptName), ".nut", "", false);
+	
+	DHookGetParamString(hParams, 1, pszScriptName, sizeof(pszScriptName));
+	StrToLowerCase(pszScriptName,pszScriptNameLowerCase, sizeof(pszScriptName));
+
 		
 	// Match overrides
 	int index = gOverrideScripts.FindString(pszScriptName);
-	if( index != -1 )
+	int indexLC = gOverrideScripts.FindString(pszScriptNameLowerCase);
+	if( index != -1 || indexLC != -1)
 	{
-		if( gOverrideCustom.GetString(pszScriptName, pszScriptOverride, sizeof(pszScriptOverride)) )
+		if (index!=-1)
+		{
+			if ( gOverrideCustom.GetString(pszScriptName, pszScriptOverride, sizeof(pszScriptOverride)) )
 			Format(pszScriptOverride, sizeof(pszScriptOverride), "vscripts_override/%s", pszScriptOverride);
+		}
 		else
-			Format(pszScriptOverride, sizeof(pszScriptOverride), "vscripts_override/%s", pszScriptName);
+		if (indexLC!=-1)
+		{
+			if ( gOverrideCustom.GetString(pszScriptNameLowerCase, pszScriptOverride, sizeof(pszScriptOverride) ))
+			Format(pszScriptOverride, sizeof(pszScriptOverride), "vscripts_override/%s", pszScriptNameLowerCase);
+		}
+		else
+			Format(pszScriptOverride, sizeof(pszScriptOverride), "vscripts_override/%s", pszScriptOverride);
 
 		if( g_bListen ) PrintToChatAll("--- VSCRIPT: Overriding script: <%s> <%s>", pszScriptName, pszScriptOverride);
 

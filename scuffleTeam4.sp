@@ -254,7 +254,7 @@ public void OnClientPostAdminCheck(int client) {
     */
 
     if (client > 0) {
-        if (IsClientConnected(client) && !IsFakeClient(client)) {
+        if (IsClientConnected(client) ){//&& !IsFakeClient(client)) {
             SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamageHook);
             ResetClient(client, true);
         }
@@ -349,7 +349,7 @@ void SetRevive(int client, int count) {
 
     // https://forums.alliedmods.net/showpost.php?p=1583406&postcount=4
     if (IsClientConnected(client) && GetClientTeam(client) != 3) {
-        if (!IsFakeClient(client)) {
+        //if (!IsFakeClient(client)) {
             bool isMaxed = count >= g_maxRevives;
 
             switch (isMaxed && !GetEntProp(client, Prop_Send, "m_bIsOnThirdStrike", 1)) {
@@ -360,7 +360,7 @@ void SetRevive(int client, int count) {
             SetEntProp(client, Prop_Send, "m_currentReviveCount", count);
             SetEntProp(client, Prop_Send, "m_bIsOnThirdStrike", isMaxed, 1);
             SetEntProp(client, Prop_Send, "m_isGoingToDie", isMaxed);
-        }
+        //}
     }
 }
 
@@ -828,9 +828,9 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
     if (IsClientConnected(client) && GetClientTeam(client) != 3) {
 
         RecordClientHealth(client);
-        if (IsFakeClient(client)) {
-            return;
-        }
+        //if (IsFakeClient(client)) {
+        //    return;
+        //}
 
         attackerId = 0;
         gameTime = GetGameTime();
