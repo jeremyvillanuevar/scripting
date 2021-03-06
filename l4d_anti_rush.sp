@@ -557,7 +557,7 @@ public Action TimerAntiRushHuman(Handle timer)
 		client = clients[i];
 
 		// Ignore incapped
-		if( incapped > g_iCvarIncap && GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) )
+		if( incapped > g_iCvarIncap)// && GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) )
 			continue;
 		
 		// Ignore bot
