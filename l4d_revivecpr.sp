@@ -3,6 +3,7 @@
 
 #include <sourcemod>
 #include <sdktools>
+#include <left4dhooks>
 
 #define PLUGIN_VERSION "1.0.5"
 #define TICKS 3
@@ -311,14 +312,52 @@ public Action Event_PlayerDeath(Event hEvent, const char[] strName, bool DontBro
 	if(victim<=0)return;
 	if(GetClientTeam(victim)==2)
 	{
-		GetClientAbsOrigin(victim, DeathPos[victim]);
 		
-		float fFloorDelta = GetDistanceToFloor(victim);
+		float origin[3];
+		GetClientAbsOrigin(GetAheadClient(), origin);	
+		float fFloorDelta = GetDistanceToFloor(GetAheadClient());	
+		int uncuerpo=-1;
+		for (int i = 1; i <= GetMaxEntities(); i++) // Get Survivor Models
+		{
+			if (!IsValidEntity(i)) continue;
+			char class[64];
+			GetEntityClassname(i, class, sizeof(class));
+			if (!StrEqual(class, "survivor_death_model", false)) continue;
+			
+			uncuerpo=i;
+			TeleportEntity(i, origin, NULL_VECTOR, NULL_VECTOR);
+		}
+		DeathPos[victim][0]=origin[0];
+		DeathPos[victim][1]=origin[1];
+		DeathPos[victim][2]=origin[2];
+		//GetClientAbsOrigin(GetAheadClient(), DeathPos[victim]);		
+		//GetClientAbsOrigin(victim, DeathPos[victim]);		
+		//float fFloorDelta = GetDistanceToFloor(victim);		
 		
 		DeathPos[victim][2]+=10.0 - fFloorDelta;
-		CanRevive[victim]=true;
+		CanRevive[victim]=true;		
 		DeathTime[victim]=GetGameTime();
-		GhostLight[victim]=AddParticle(PARTICLE_LIGHT_3, DeathPos[victim]);
+		GhostLight[victim]=AddParticle(PARTICLE_LIGHT_3, DeathPos[victim],uncuerpo);
+				
+		for (int j = 1; j <= MaxClients; j++)
+		{
+			if (CanRevive[j])//!IsClientInGame(j) && 
+			{
+				DeathPos[j][0]=origin[0];
+				DeathPos[j][1]=origin[1];
+				DeathPos[j][2]=origin[2];
+				//GetClientAbsOrigin(GetAheadClient(), DeathPos[j]);			
+				DeathPos[j][2]+=10.0 - fFloorDelta;
+				//if (GhostLight[j]!=0 && IsValidEntity(GhostLight[j]))
+				//{
+				//	KillParticle(GhostLight[j]);
+				//}
+				//GhostLight[j]=0;			
+				//GhostLight[j]=AddParticle(PARTICLE_LIGHT_3, DeathPos[j]);
+				break;
+			}
+		}
+		
 		if(timer_handle==INVALID_HANDLE)
 		{
 			timer_handle=CreateTimer(1.0/TICKS, Watch, 0, TIMER_REPEAT);
@@ -707,29 +746,50 @@ void ShowBar(int client, int dead, float pos, int max, bool firstaidkit)
 	if(firstaidkit)	PrintCenterText(client, "%t  %3.0f %\n<< %s >>", "Using_Medkit", sUsername, GaugeNum, ChargeBar); // "Reviving {1} using Medkit  %3.0f %\n<< %s >>"
 	else            PrintCenterText(client, "%t  %3.0f %\n<< %s >>", "Using_CPR", sUsername, GaugeNum, ChargeBar); //"Heart massage for {1}  %3.0f %\n<< %s >>"
 }
-public int AddParticle(char s_Effect[100], float f_Origin[3])
+public int AddParticle(char s_Effect[100], float f_Origin[3],int attachment)
 {
 	int i_Particle;
 	
 	i_Particle = CreateEntityByName("info_particle_system");
 	
-	if (IsValidEdict(i_Particle))
-	{
-		TeleportEntity(i_Particle, f_Origin, NULL_VECTOR, NULL_VECTOR);
+	if( i_Particle != INVALID_ENT_REFERENCE )
+	{	
+	//if (IsValidEdict(i_Particle))
+	//{
+		//TeleportEntity(i_Particle, f_Origin, NULL_VECTOR, NULL_VECTOR);
 		DispatchKeyValue(i_Particle, "effect_name", s_Effect);
 		DispatchSpawn(i_Particle);
 		ActivateEntity(i_Particle);
 		AcceptEntityInput(i_Particle, "Start");
+		// Attach to survivor
+		SetVariantString("!activator");
+		AcceptEntityInput(i_Particle, "SetParent", attachment);
+		TeleportEntity(i_Particle, view_as<float>({ 0.0, 0.0, 50.0 }), NULL_VECTOR, NULL_VECTOR);
+
 	}
 	return i_Particle;
 }
 void KillParticle(int i_Particle)
 {
-	if (IsValidEntity(i_Particle))
+	if (IsValidEntRef(i_Particle))
 	{
-		AcceptEntityInput(i_Particle, "Kill");
+		// Remove
+		char sTemp[64];
+		Format(sTemp, sizeof(sTemp), "OnUser3 !self:Kill::%f:-1", 0);
+		SetVariantString(sTemp);
+		AcceptEntityInput(i_Particle, "AddOutput");
+		AcceptEntityInput(i_Particle, "FireUser3");
 		//RemoveEdict(i_Particle);
+		AcceptEntityInput(i_Particle, "Kill");
+
 	}
+}
+
+bool IsValidEntRef(int entity)
+{
+	if( entity && EntRefToEntIndex(entity) != INVALID_ENT_REFERENCE )
+		return true;
+	return false;
 }
 
 public Action Timer_LoadStatDelayed(Handle timer, int UserId)
@@ -819,4 +879,47 @@ stock void ReplaceColor(char[] message, int maxLen)
     ReplaceString(message, maxLen, "{cyan}", "\x03", false);
     ReplaceString(message, maxLen, "{orange}", "\x04", false);
     ReplaceString(message, maxLen, "{green}", "\x05", false);
+}
+
+int GetAheadClient()
+{	
+	float flow;
+	int count, countflow, index;
+	// Get survivors flow distance
+	ArrayList aList = new ArrayList(2);
+	// Account for incapped
+	int clients[MAXPLAYERS+1];
+	int client=0;
+	countflow=0;
+	// Check valid survivors, count incapped
+	for( int i = 1; i <= MaxClients; i++ )
+	{
+		if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
+		{
+			clients[count++] = i;
+		}
+	}
+
+	for( int i = 0; i < count; i++ )
+	{
+		client = clients[i];
+		// Ignore bot
+		if(IsFakeClient(client))
+			continue;
+		flow = L4D2Direct_GetFlowDistance(client);
+		if( flow && flow != -9999.0 ) // Invalid flows
+		{
+			countflow++;
+			index = aList.Push(flow);
+			aList.Set(index, client, 1);
+		}
+	}
+	// Incase not enough players or some have invalid flow distance, we still need an average.
+	if( countflow >= 1 )
+	{
+		aList.Sort(Sort_Descending, Sort_Float);
+		client = aList.Get(0, 1);
+	}
+	delete aList;
+	return client;
 }
