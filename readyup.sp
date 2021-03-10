@@ -298,8 +298,8 @@ stock void DoSecrets(int client)
 		ActivateEntity(particle);
 		AcceptEntityInput(particle, "start");
 		CreateTimer(10.0, killParticle, particle, TIMER_FLAG_NO_MAPCHANGE);
-		
-		for (int i = 1; i <= MaxClients; i++)
+		EmitSoundToAll(SOUND, client, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
+		/*for (int i = 1; i <= MaxClients; i++)
 		{
 			if (!IsClientInGame(i))
 				continue;
@@ -308,7 +308,7 @@ stock void DoSecrets(int client)
 				continue;
 
 			EmitSoundToClient(i, SOUND, i, SNDCHAN_WEAPON, SNDLEVEL_SCREAMING);
-		}
+		}*/
 		CreateTimer(2.0, SecretSpamDelay, client);
 		blockSecretSpam[client] = true;
 	}
@@ -1004,7 +1004,7 @@ bool CheckFullReady()
 		return readyCount >= GetRealClientCount();
 	}
 	// Players vs Players
-	return readyCount >= (GetConVarInt(survivor_limit) + GetConVarInt(z_max_player_zombies)); // + casterCount
+	return readyCount >= (GetRealClientCount() + GetSIClientCount()); // + casterCount
 }
 
 void InitiateLiveCountdown()
@@ -1035,7 +1035,7 @@ public Action ReadyCountdownDelay_Timer(Handle timer)
 			}
 			else
 			{ 
-				EmitSoundToAll("/buttons/blip2.wav", _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
+				EmitSoundToAll(liveSound, _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
 			}
 		}
 		return Plugin_Stop;
@@ -1045,7 +1045,7 @@ public Action ReadyCountdownDelay_Timer(Handle timer)
 		PrintHintTextToAll("La ronda comienza en: %d segs\nEscriba !unready para cancelar", readyDelay);
 		if (GetConVarBool(l4d_ready_enable_sound))
 		{
-			EmitSoundToAll("/buttons/blip1.wav", _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
+			EmitSoundToAll("weapons/hegrenade/beep.wav", _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
 		}
 		readyDelay--;
 	}
@@ -1072,16 +1072,16 @@ int GetRealClientCount()
 		if (IsClientConnected(i))
 		{ 
 			if (!IsClientInGame(i)) clients++;
-			else if (!IsFakeClient(i) && GetClientTeam(i) == 2) clients++;
+			else if (!IsFakeClient(i) && GetClientTeam(i) == L4D2Team_Survivor) clients++;
 		}
 	}
 	return clients;
 }
 
+
 int GetSeriousClientCount()
 {
 	int clients = 0;
-	
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (IsClientConnected(i) && !IsFakeClient(i))
@@ -1089,9 +1089,29 @@ int GetSeriousClientCount()
 			clients++;
 		}
 	}
-	
 	return clients;
 }
+
+
+
+int GetSIClientCount()
+{
+	int clients = 0;
+	for (int i = 1; i <= MaxClients; i++)
+	{
+		if (IsClientInGame(i) && GetClientTeam(i) == L4D2Team_Infected)
+		{
+			//if (IsPlayerAlive(i))
+			//{
+			if (!IsFakeClient(i))
+				clients++;
+			//}
+		}
+	}
+	return clients;
+}
+
+
 
 stock void SetClientFrozen(int client, int freeze)
 {
