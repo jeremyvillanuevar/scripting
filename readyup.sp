@@ -204,9 +204,11 @@ public Action KickSpecs_Cmd(int client, int args)
 			char sBuffer[64];
 			g_hVote = NativeVotes_Create(VoteActionHandler, NativeVotesType_Custom_YesNo, MenuAction_VoteCancel | MenuAction_VoteEnd | MenuAction_End);
 			Format(sBuffer, sizeof(sBuffer), "Kick Non-Admin & Non-Casting Spectators?");
-			NativeVotes_SetTarget(g_hVote, sBuffer);
+			NativeVotes_SetTitle(g_hVote, sBuffer);
+			//SetBuiltinVoteArgument(g_hVote, sBuffer);
 			NativeVotes_SetInitiator(g_hVote, client);
 			NativeVotes_SetResultCallback(g_hVote, SpecVoteResultHandler);
+			//SetBuiltinVoteResultCallback(g_hVote, SpecVoteResultHandler);
 			NativeVotes_Display(g_hVote, iPlayers, iNumPlayers, 20);
 			return;
 		}
@@ -215,43 +217,44 @@ public Action KickSpecs_Cmd(int client, int args)
 	return;
 }
 
-public int VoteActionHandler(Handle vote, MenuAction action, BuiltinVoteFailReason param1, int param2)
+public int VoteActionHandler(Handle vote, MenuAction action, int param1, int param2)
 {
 	switch (action)
 	{
 		case MenuAction_End:
 		{
 			g_hVote = INVALID_HANDLE;
-			CloseHandle(vote);
+			NativeVotes_Close(vote);
 		}
 		case MenuAction_VoteCancel:
 		{
-			DisplayBuiltinVoteFail(vote, param1);
+			NativeVotes_DisplayFail(vote, NativeVotesFail_Generic);
 		}
 	}
 }
 
-public BuiltinVoteHandler SpecVoteResultHandler(Handle vote, int num_votes, int num_clients, const client_info[][2], int num_items, const item_info[][2])
+public int SpecVoteResultHandler(Handle vote, int num_votes, int num_clients, const client_info1[],const client_info2[], int num_items, const item_info1[],const item_info2[])
 {
 	for (int i=0; i<num_items; i++)
-	{
-		if (item_info[i][BUILTINVOTEINFO_ITEM_INDEX] == BUILTINVOTES_VOTE_YES)
-		{
-			if (item_info[i][BUILTINVOTEINFO_ITEM_VOTES] > (num_votes / 2))
-			{
-				DisplayBuiltinVotePass(vote, "Ciao Spectators!");
-				for (int c=1; c<=MaxClients; c++)
-				{
-					if (IsClientInGame(c) && (GetClientTeam(c) == 1) && !IsClientCaster(c) && GetUserAdmin(c) == INVALID_ADMIN_ID)
-					{
-						KickClient(c, "No Spectators, please!");
-					}
-				}
-				return;
-			}
-		}
-	}
-	DisplayBuiltinVoteFail(vote, BuiltinVoteFail_Loses);
+    {
+        if (item_info1[i] == NATIVEVOTES_VOTE_YES)
+        {
+            if (item_info2[i] > (num_votes / 2))
+            {
+                NativeVotes_DisplayPass(vote, "Ciao Spectators!");
+                for (int c=1; c<=MaxClients; c++)
+                {
+                    if (IsClientInGame(c) && (GetClientTeam(c) == 1) && !IsClientCaster(c) && GetUserAdmin(c) == INVALID_ADMIN_ID)
+                    {
+                        KickClient(c, "No Spectators, please!");
+                    }
+                }
+                return;
+            }
+        }
+    }
+	NativeVotes_DisplayFail(vote,NativeVotesFail_Loses);
+	//DisplayBuiltinVoteFail(vote, BuiltinVoteFail_Loses);
 }
 
 public Action Secret_Cmd(int client, int args)
@@ -684,11 +687,11 @@ public Action MenuCmd_Timer(Handle timer)
 
 void UpdatePanel()
 {
-	if (IsBuiltinVoteInProgress())
+	if (NativeVotes_IsVoteInProgress())
 	{
 		for (int i = 1; i <= MaxClients; i++)
 		{
-			if (IsClientConnected(i) && IsClientInGame(i) && IsClientInBuiltinVotePool(i)) hiddenPanel[i] = true;
+			if (IsClientConnected(i) && IsClientInGame(i) && NativeVotes_IsClientInVotePool(i)) hiddenPanel[i] = true;
 		}
 	}
 	else
