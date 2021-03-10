@@ -13,7 +13,7 @@
 #define MAX_FOOTER_LEN 65
 #define MAX_SOUNDS 5
 
-#define SOUND "/ui/survival_medal.wav"
+#define SOUND "ui\\survival_medal.wav"
 
 #define DEBUG 0
 
@@ -1045,7 +1045,7 @@ public Action ReadyCountdownDelay_Timer(Handle timer)
 		PrintHintTextToAll("La ronda comienza en: %d segs\nEscriba !unready para cancelar", readyDelay);
 		if (GetConVarBool(l4d_ready_enable_sound))
 		{
-			EmitSoundToAll("weapons/hegrenade/beep.wav", _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
+			EmitSoundToAll("weapons\\hegrenade\\beep.wav", _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
 		}
 		readyDelay--;
 	}
