@@ -75,11 +75,11 @@ bool bHostName;
 
 char countdownSound[MAX_SOUNDS][]=
 {
-	"/buttons/blip1.wav",
-	"/buttons/blip1.wav",
-	"/buttons/blip1.wav",
-	"/buttons/blip1.wav",
-	"/buttons/blip1.wav"
+	"buttons\\blip1.wav",
+	"buttons\\blip1.wav",
+	"buttons\\blip1.wav",
+	"buttons\\blip1.wav",
+	"buttons\\blip1.wav"
 };
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
@@ -95,6 +95,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 public void OnPluginStart()
 {
+	
 	CreateConVar("l4d_ready_enabled", "1", "This cvar doesn't do anything, but if it is 0 the logger wont log this game.", 0, true, 0.0, true, 1.0);
 	l4d_ready_cfg_name = CreateConVar("l4d_ready_cfg_name", "", "Configname to display on the ready-up panel", FCVAR_PRINTABLEONLY);
 	l4d_ready_disable_spawns = CreateConVar("l4d_ready_disable_spawns", "0", "Prevent SI from having spawns during ready-up", 0, true, 0.0, true, 1.0);
@@ -109,6 +110,16 @@ public void OnPluginStart()
 	HookEvent("round_start", RoundStart_Event);
 	HookEvent("player_team", PlayerTeam_Event);
 
+	GetConVarString(l4d_ready_live_sound, liveSound, sizeof(liveSound));
+	PrecacheSound(SOUND);
+	PrecacheSound("buttons\\blip1.wav");
+	PrecacheSound("buttons\\blip2.wav");
+	PrecacheSound(liveSound);
+	for (int i = 0; i < MAX_SOUNDS; i++)
+	{
+		PrecacheSound(countdownSound[i]);
+	}
+	
 	casterTrie = CreateTrie();
 	allowedCastersTrie = CreateTrie();
 
@@ -165,15 +176,6 @@ public void OnPluginEnd()
 public void OnMapStart()
 {
 	/* OnMapEnd needs this to work */
-	GetConVarString(l4d_ready_live_sound, liveSound, sizeof(liveSound));
-	PrecacheSound(SOUND);
-	PrecacheSound("/buttons/blip1.wav");
-	PrecacheSound("/buttons/blip2.wav");
-	PrecacheSound(liveSound);
-	for (int i = 0; i < MAX_SOUNDS; i++)
-	{
-		PrecacheSound(countdownSound[i]);
-	}
 	for (int client = 1; client <= MAXPLAYERS; client++)
 	{
 		blockSecretSpam[client] = false;
@@ -298,7 +300,8 @@ stock void DoSecrets(int client)
 		ActivateEntity(particle);
 		AcceptEntityInput(particle, "start");
 		CreateTimer(10.0, killParticle, particle, TIMER_FLAG_NO_MAPCHANGE);
-		EmitSoundToAll(SOUND, client, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
+		Command_Play(SOUND);
+		//EmitSoundToAll(SOUND, client, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
 		/*for (int i = 1; i <= MaxClients; i++)
 		{
 			if (!IsClientInGame(i))
@@ -1031,11 +1034,13 @@ public Action ReadyCountdownDelay_Timer(Handle timer)
 		{
 			if (GetConVarBool(l4d_ready_chuckle))
 			{
-				EmitSoundToAll(countdownSound[GetRandomInt(0,MAX_SOUNDS-1)]);
+				Command_Play(countdownSound[GetRandomInt(0,MAX_SOUNDS-1)]);
+				//EmitSoundToAll(countdownSound[GetRandomInt(0,MAX_SOUNDS-1)]);
 			}
 			else
 			{ 
-				EmitSoundToAll(liveSound, _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
+				Command_Play(liveSound);
+				//EmitSoundToAll(liveSound, _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
 			}
 		}
 		return Plugin_Stop;
@@ -1045,7 +1050,8 @@ public Action ReadyCountdownDelay_Timer(Handle timer)
 		PrintHintTextToAll("La ronda comienza en: %d segs\nEscriba !unready para cancelar", readyDelay);
 		if (GetConVarBool(l4d_ready_enable_sound))
 		{
-			EmitSoundToAll("weapons\\hegrenade\\beep.wav", _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
+			Command_Play("weapons\\hegrenade\\beep.wav");
+			//EmitSoundToAll("weapons\\hegrenade\\beep.wav", _, SNDCHAN_AUTO, SNDLEVEL_NORMAL, SND_NOFLAGS, 0.5);
 		}
 		readyDelay--;
 	}
@@ -1128,3 +1134,21 @@ stock bool IsPlayer(int client)
 	L4D2Team team = view_as<L4D2Team>(GetClientTeam(client));
 	return (team == L4D2Team_Survivor || team == L4D2Team_Infected);
 }
+
+
+
+
+public Action Command_Play(const char[] arguments)
+{
+
+	for(int i=1; i<=MaxClients; i++)
+	{
+		if( !IsClientInGame(i) )
+		continue;
+     	  	ClientCommand(i, "playgamesound %s", arguments);
+		//PrintToChatAll("*************************2*****************************");
+
+	}  
+	//return Plugin_Handled;
+}
+
