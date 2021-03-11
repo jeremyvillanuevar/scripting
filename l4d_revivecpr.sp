@@ -311,8 +311,7 @@ public Action Event_PlayerDeath(Event hEvent, const char[] strName, bool DontBro
 	int victim = GetClientOfUserId(hEvent.GetInt("userid"));
 	if(victim<=0)return;
 	if(GetClientTeam(victim)==2)
-	{
-		
+	{		
 		float origin[3];
 		GetClientAbsOrigin(GetAheadClient(), origin);	
 		float fFloorDelta = GetDistanceToFloor(GetAheadClient());	
