@@ -1033,6 +1033,8 @@ void SetTeamFrozen(L4D2Team team, bool freezeStatus)
 bool CheckFullReady()
 {
 	int readyCount = 0;
+	int readySurvivor =0;
+	int readyInfected=0;
 	int casterCount = 0;
 	float total=0.0;
 	for (int client = 1; client <= MaxClients; client++)
@@ -1047,8 +1049,23 @@ bool CheckFullReady()
 			if (IsPlayer(client))
 			{
 				total += 1.0;
-				if (isPlayerReady[client]) readyCount++;
+				if (isPlayerReady[client])
+				{		
+					if (view_as<L4D2Team>(GetClientTeam(client)) == L4D2Team_Infected)
+					{
+						readyInfected++;
+					}
+					if (view_as<L4D2Team>(GetClientTeam(client)) == L4D2Team_Survivor)
+					{
+						readySurvivor++;
+					}
+					readyCount++;
+				
+				}
 			}
+			
+			
+			
 		}
 	}
 	
@@ -1066,12 +1083,18 @@ bool CheckFullReady()
 	GetConVarString(FindConVar("mp_gamemode"), GameMode, 32);
 	if (StrContains(GameMode, "coop", false) != -1 || StrContains(GameMode, "survival", false) != -1 || StrEqual(GameMode, "realism", false))
 	{
-		return readyCount >= GetRealClientCount();
+		// Coop
+		if (g_iCvar_VoteOnePlayerbyTeam==1)
+		{
+			return readySurvivor==1;
+		}
+		else
+			return readyCount >= GetRealClientCount();
 	}
 	// Players vs Players
 	if (g_iCvar_VoteOnePlayerbyTeam==1)
 	{
-		if ((GetRealClientCount()>=1) && (GetSIClientCount()>=1))
+		if ((readySurvivor==1) && (readyInfected==1))
 			return true;
 	}
 	return readyCount >= (GetRealClientCount() + GetSIClientCount()); // + casterCount
