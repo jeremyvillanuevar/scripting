@@ -78,7 +78,8 @@ public void OnPluginStart()
 	g_cvarConfigPath = CreateConVar("sm_helpmenu_config_path", "configs/helpmenu.cfg", "Path to configuration file.");
 
 	RegConsoleCmd("sm_helpmenu", Command_HelpMenu, "Display the help menu.");
-	RegConsoleCmd("sm_help", Command_HelpMenu, "Display the help menu.");
+	RegConsoleCmd("sm_helpcommands", Command_HelpMenu, "Display the help menu.");
+	RegConsoleCmd("sm_ayudamenu", Command_HelpMenu, "Display the help menu.");
 	RegConsoleCmd("sm_commands", Command_HelpMenu, "Display the help menu.");
 	RegAdminCmd("sm_helpmenu_reload", Command_HelpMenuReload, ADMFLAG_ROOT, "Reload the configuration file");
 

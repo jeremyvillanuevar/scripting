@@ -536,6 +536,8 @@ public Action TimerAntiRushHuman(Handle timer)
 	}
 	float flow;
 	int count, countflow, index;
+	countflow=0;
+	count=0;	
 	// Get survivors flow distance
 	ArrayList aList = new ArrayList(2);
 	// Account for incapped
@@ -702,7 +704,7 @@ public Action TimerAntiRushHuman(Handle timer)
 					}
 					// Compare lower flow with next survivor, they're behind
 					if (teleportedahead)
-					{						
+					{					
 						float vPos[3];
 						GetClientAbsOrigin(clientflowNear, vPos);				
 						// Hint

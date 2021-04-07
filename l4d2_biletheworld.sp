@@ -56,6 +56,8 @@ public void OnPluginStart()
 	
 	cvar_slapPower = CreateConVar("l4d2_bile_the_world_expl_pwr", "150.0", "How much Force is applied to the victims ", FCVAR_NONE|FCVAR_REPLICATED);
 	cvar_bFling = CreateConVar("l4d2_bile_the_world_flingenabled", "0", "Turn Flinging by Boomer Explosion on and off ", FCVAR_NONE|FCVAR_REPLICATED);
+	
+	AutoExecConfig(true,			"l4d2_bile_the_world");
 }
 
 public Action event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
