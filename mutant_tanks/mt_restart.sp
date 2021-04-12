@@ -1,6 +1,6 @@
 /**
  * Mutant Tanks: a L4D/L4D2 SourceMod Plugin
- * Copyright (C) 2020  Alfred "Crasher_3637/Psyk0tik" Llagas
+ * Copyright (C) 2021  Alfred "Crasher_3637/Psyk0tik" Llagas
  *
  * This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
  *
@@ -12,6 +12,10 @@
 #include <sourcemod>
 #include <sdkhooks>
 #include <mutant_tanks>
+
+#undef REQUIRE_PLUGIN
+#tryinclude <left4dhooks>
+#define REQUIRE_PLUGIN
 
 #pragma semicolon 1
 #pragma newdecls required
@@ -25,18 +29,21 @@ public Plugin myinfo =
 	url = MT_URL
 };
 
-bool g_bLateLoad;
+bool g_bLateLoad, g_bSecondGame;
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	if (!bIsValidGame(false) && !bIsValidGame())
+	switch (GetEngineVersion())
 	{
-		strcopy(error, err_max, "\"[MT] Restart Ability\" only supports Left 4 Dead 1 & 2.");
+		case Engine_Left4Dead: g_bSecondGame = false;
+		case Engine_Left4Dead2: g_bSecondGame = true;
+		default:
+		{
+			strcopy(error, err_max, "\"[MT] Restart Ability\" only supports Left 4 Dead 1 & 2.");
 
-		return APLRes_SilentFailure;
+			return APLRes_SilentFailure;
+		}
 	}
-
-	MarkNativeAsOptional("MT_IsCloneSupported");
 
 	g_bLateLoad = late;
 
@@ -53,8 +60,9 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 enum struct esGeneral
 {
+	bool g_bLeft4DHooksInstalled;
+
 	Handle g_hSDKGetLastKnownArea;
-	Handle g_hSDKRespawnPlayer;
 
 	int g_iFlowOffset;
 }
@@ -146,10 +154,32 @@ enum struct esCache
 
 esCache g_esCache[MAXPLAYERS + 1];
 
+public void OnLibraryAdded(const char[] name)
+{
+	if (StrEqual(name, "left4dhooks"))
+	{
+		g_esGeneral.g_bLeft4DHooksInstalled = true;
+	}
+}
+
+public void OnLibraryRemoved(const char[] name)
+{
+	if (StrEqual(name, "left4dhooks"))
+	{
+		g_esGeneral.g_bLeft4DHooksInstalled = false;
+	}
+}
+
+public void OnAllPluginsLoaded()
+{
+	g_esGeneral.g_bLeft4DHooksInstalled = LibraryExists("left4dhooks");
+}
+
 public void OnPluginStart()
 {
 	LoadTranslations("common.phrases");
 	LoadTranslations("mutant_tanks.phrases");
+	LoadTranslations("mutant_tanks_names.phrases");
 
 	RegConsoleCmd("sm_mt_restart", cmdRestartInfo, "View information about the Restart ability.");
 
@@ -157,40 +187,27 @@ public void OnPluginStart()
 	if (gdMutantTanks == null)
 	{
 		SetFailState("Unable to load the \"mutant_tanks\" gamedata file.");
-
-		return;
 	}
 
-	g_esGeneral.g_iFlowOffset = gdMutantTanks.GetOffset("m_flow");
+	g_esGeneral.g_iFlowOffset = gdMutantTanks.GetOffset("WitchLocomotion::IsAreaTraversable::m_flow");
 	if (g_esGeneral.g_iFlowOffset == -1)
 	{
-		MT_LogMessage(MT_LOG_SERVER, "%s Failed to load offset: m_flow", MT_TAG);
+		LogError("%s Failed to load offset: WitchLocomotion::IsAreaTraversable::m_flow", MT_TAG);
 	}
 
 	StartPrepSDKCall(SDKCall_Player);
 	if (!PrepSDKCall_SetFromConf(gdMutantTanks, SDKConf_Virtual, "CTerrorPlayer::GetLastKnownArea"))
 	{
+		delete gdMutantTanks;
+
 		SetFailState("Failed to load offset: CTerrorPlayer::GetLastKnownArea");
 	}
 
 	PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
-
 	g_esGeneral.g_hSDKGetLastKnownArea = EndPrepSDKCall();
 	if (g_esGeneral.g_hSDKGetLastKnownArea == null)
 	{
-		MT_LogMessage(MT_LOG_SERVER, "%s Your \"CTerrorPlayer::GetLastKnownArea\" offsets are outdated.", MT_TAG);
-	}
-
-	StartPrepSDKCall(SDKCall_Player);
-	if (!PrepSDKCall_SetFromConf(gdMutantTanks, SDKConf_Signature, "CTerrorPlayer::RoundRespawn"))
-	{
-		SetFailState("Failed to find signature: CTerrorPlayer::RoundRespawn");
-	}
-
-	g_esGeneral.g_hSDKRespawnPlayer = EndPrepSDKCall();
-	if (g_esGeneral.g_hSDKRespawnPlayer == null)
-	{
-		MT_LogMessage(MT_LOG_SERVER, "%s Your \"CTerrorPlayer::RoundRespawn\" signature is outdated.", MT_TAG);
+		LogError("%s Your \"CTerrorPlayer::GetLastKnownArea\" offsets are outdated.", MT_TAG);
 	}
 
 	delete gdMutantTanks;
@@ -345,7 +362,7 @@ public void MT_OnMenuItemDisplayed(int client, const char[] info, char[] buffer,
 
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if (MT_IsCorePluginEnabled() && bIsValidClient(victim, MT_CHECK_INDEX|MT_CHECK_INGAME|MT_CHECK_ALIVE) && bIsValidEntity(inflictor) && damage >= 0.5)
+	if (MT_IsCorePluginEnabled() && bIsValidClient(victim, MT_CHECK_INDEX|MT_CHECK_INGAME|MT_CHECK_ALIVE) && bIsValidEntity(inflictor) && damage > 0.0)
 	{
 		static char sClassname[32];
 		GetEntityClassname(inflictor, sClassname, sizeof(sClassname));
@@ -380,7 +397,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 
 public void MT_OnPluginCheck(ArrayList &list)
 {
-	char sName[32];
+	char sName[128];
 	GetPluginFilename(null, sName, sizeof(sName));
 	list.PushString(sName);
 }
@@ -393,7 +410,7 @@ public void MT_OnAbilityCheck(ArrayList &list, ArrayList &list2, ArrayList &list
 	list4.PushString(MT_CONFIG_SECTION4);
 }
 
-public void MT_OnCombineAbilities(int tank, int type, float random, const char[] combo, int survivor, int weapon, const char[] classname)
+public void MT_OnCombineAbilities(int tank, int type, const float random, const char[] combo, int survivor, int weapon, const char[] classname)
 {
 	if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility != 2)
 	{
@@ -608,7 +625,7 @@ public void MT_OnConfigsLoaded(const char[] subsection, const char[] key, const 
 
 public void MT_OnSettingsCached(int tank, bool apply, int type)
 {
-	bool bHuman = MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT);
+	bool bHuman = bIsTank(tank, MT_CHECK_FAKECLIENT);
 	vGetSettingValue(apply, bHuman, g_esCache[tank].g_sRestartLoadout, sizeof(esCache::g_sRestartLoadout), g_esPlayer[tank].g_sRestartLoadout, g_esAbility[type].g_sRestartLoadout);
 	g_esCache[tank].g_flRestartChance = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flRestartChance, g_esAbility[type].g_flRestartChance);
 	g_esCache[tank].g_flRestartRange = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flRestartRange, g_esAbility[type].g_flRestartRange);
@@ -647,7 +664,7 @@ public void MT_OnHookEvent(bool hooked)
 			HookEvent("player_entered_checkpoint", MT_OnEventFired);
 			HookEvent("player_left_checkpoint", MT_OnEventFired);
 
-			if (!bIsValidGame())
+			if (!g_bSecondGame)
 			{
 				HookEvent("player_entered_start_area", MT_OnEventFired);
 			}
@@ -657,7 +674,7 @@ public void MT_OnHookEvent(bool hooked)
 			UnhookEvent("player_entered_checkpoint", MT_OnEventFired);
 			UnhookEvent("player_left_checkpoint", MT_OnEventFired);
 
-			if (!bIsValidGame())
+			if (!g_bSecondGame)
 			{
 				UnhookEvent("player_entered_start_area", MT_OnEventFired);
 			}
@@ -687,12 +704,26 @@ public void MT_OnEventFired(Event event, const char[] name, bool dontBroadcast)
 			vRemoveRestart(iTank);
 		}
 	}
-	else if (StrEqual(name, "player_death") || StrEqual(name, "player_spawn"))
+	else if (StrEqual(name, "player_death"))
 	{
 		int iTankId = event.GetInt("userid"), iTank = GetClientOfUserId(iTankId);
 		if (MT_IsTankSupported(iTank, MT_CHECK_INDEX|MT_CHECK_INGAME))
 		{
 			vRemoveRestart(iTank);
+		}
+	}
+	else if (StrEqual(name, "player_spawn"))
+	{
+		int iPlayerId = event.GetInt("userid"), iPlayer = GetClientOfUserId(iPlayerId);
+		if (MT_IsTankSupported(iPlayer, MT_CHECK_INDEX|MT_CHECK_INGAME))
+		{
+			vRemoveRestart(iPlayer);
+		}
+		else if (bIsSurvivor(iPlayer) && !g_esPlayer[iPlayer].g_bRecorded && bIsSurvivorInCheckpoint(iPlayer, true))
+		{
+			g_esPlayer[iPlayer].g_bRecorded = true;
+
+			GetClientAbsOrigin(iPlayer, g_esPlayer[iPlayer].g_flPosition);
 		}
 	}
 	else if (StrEqual(name, "player_left_checkpoint"))
@@ -703,13 +734,14 @@ public void MT_OnEventFired(Event event, const char[] name, bool dontBroadcast)
 	{
 		g_esPlayer[GetClientOfUserId(event.GetInt("userid"))].g_bCheckpoint = true;
 	}
-	else if (StrEqual(name, "mission_lost") || StrEqual(name, "round_start") || StrEqual(name, "round_end"))
+	else if (StrEqual(name, "mission_lost"))
 	{
 		vReset();
 	}
-
-	if (StrEqual(name, "round_start") || StrEqual(name, "round_end"))
+	else if (StrEqual(name, "round_start") || StrEqual(name, "round_end"))
 	{
+		vReset();
+
 		for (int iPlayer = 1; iPlayer <= MaxClients; iPlayer++ )
 		{
 			switch (bIsSurvivor(iPlayer, MT_CHECK_INGAME))
@@ -717,17 +749,6 @@ public void MT_OnEventFired(Event event, const char[] name, bool dontBroadcast)
 				case true: g_esPlayer[iPlayer].g_bCheckpoint = true;
 				case false: g_esPlayer[iPlayer].g_bCheckpoint = false;
 			}
-		}
-	}
-
-	if (StrEqual(name, "player_spawn"))
-	{
-		int iSurvivorId = event.GetInt("userid"), iSurvivor = GetClientOfUserId(iSurvivorId);
-		if (bIsSurvivor(iSurvivor) && !g_esPlayer[iSurvivor].g_bRecorded && bIsSurvivorInCheckpoint(iSurvivor, true))
-		{
-			g_esPlayer[iSurvivor].g_bRecorded = true;
-
-			GetClientAbsOrigin(iSurvivor, g_esPlayer[iSurvivor].g_flPosition);
 		}
 	}
 }
@@ -739,7 +760,7 @@ public void MT_OnAbilityActivated(int tank)
 		return;
 	}
 
-	if (MT_IsTankSupported(tank) && (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iRestartAbility == 1 && g_esCache[tank].g_iComboAbility == 0)
+	if (MT_IsTankSupported(tank) && (!bIsTank(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iRestartAbility == 1 && g_esCache[tank].g_iComboAbility == 0)
 	{
 		vRestartAbility(tank, GetRandomFloat(0.1, 100.0));
 	}
@@ -809,7 +830,7 @@ static void vRestartAbility(int tank, float random, int pos = -1)
 		return;
 	}
 
-	if (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
+	if (!bIsTank(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
 	{
 		g_esPlayer[tank].g_bFailed = false;
 		g_esPlayer[tank].g_bNoAmmo = false;
@@ -836,13 +857,13 @@ static void vRestartAbility(int tank, float random, int pos = -1)
 
 		if (iSurvivorCount == 0)
 		{
-			if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+			if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 			{
 				MT_PrintToChat(tank, "%s %t", MT_TAG3, "RestartHuman4");
 			}
 		}
 	}
-	else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+	else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 	{
 		MT_PrintToChat(tank, "%s %t", MT_TAG3, "RestartAmmo");
 	}
@@ -855,15 +876,15 @@ static void vRestartHit(int survivor, int tank, float random, float chance, int 
 		return;
 	}
 
-	if (enabled == 1 && bIsSurvivor(survivor))
+	if (enabled == 1 && bIsSurvivor(survivor) && !MT_DoesSurvivorHaveRewardType(survivor, MT_REWARD_GODMODE))
 	{
-		if (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
+		if (!bIsTank(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
 		{
 			static int iTime;
 			iTime = GetTime();
 			if (random <= chance)
 			{
-				if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && (flags & MT_ATTACK_RANGE) && (g_esPlayer[tank].g_iCooldown == -1 || g_esPlayer[tank].g_iCooldown < iTime))
+				if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && (flags & MT_ATTACK_RANGE) && (g_esPlayer[tank].g_iCooldown == -1 || g_esPlayer[tank].g_iCooldown < iTime))
 				{
 					g_esPlayer[tank].g_iAmmoCount++;
 
@@ -876,12 +897,10 @@ static void vRestartHit(int survivor, int tank, float random, float chance, int 
 					}
 				}
 
-				SDKCall(g_esGeneral.g_hSDKRespawnPlayer, survivor);
-
 				static char sItems[5][64];
 				ReplaceString(g_esCache[tank].g_sRestartLoadout, sizeof(esAbility::g_sRestartLoadout), " ", "");
 				ExplodeString(g_esCache[tank].g_sRestartLoadout, ",", sItems, sizeof(sItems), sizeof(sItems[]));
-
+				MT_RespawnSurvivor(survivor);
 				vRemoveWeapons(survivor);
 
 				for (int iItem = 0; iItem < sizeof(sItems); iItem++)
@@ -948,7 +967,7 @@ static void vRestartHit(int survivor, int tank, float random, float chance, int 
 			}
 			else if ((flags & MT_ATTACK_RANGE) && (g_esPlayer[tank].g_iCooldown == -1 || g_esPlayer[tank].g_iCooldown < iTime))
 			{
-				if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bFailed)
+				if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bFailed)
 				{
 					g_esPlayer[tank].g_bFailed = true;
 
@@ -956,7 +975,7 @@ static void vRestartHit(int survivor, int tank, float random, float chance, int 
 				}
 			}
 		}
-		else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bNoAmmo)
+		else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bNoAmmo)
 		{
 			g_esPlayer[tank].g_bNoAmmo = true;
 
@@ -967,8 +986,13 @@ static void vRestartHit(int survivor, int tank, float random, float chance, int 
 
 static bool bIsSurvivorInCheckpoint(int survivor, bool start)
 {
+	if (g_esGeneral.g_bLeft4DHooksInstalled || g_esGeneral.g_hSDKGetLastKnownArea == null)
+	{
+		return start ? (L4D_IsInFirstCheckpoint(survivor) || GetEntProp(survivor, Prop_Send, "m_isInMissionStartArea") == 1) : L4D_IsInLastCheckpoint(survivor);
+	}
+
 	bool bReturn = false;
-	if (g_esPlayer[survivor].g_bCheckpoint)
+	if (g_esPlayer[survivor].g_bCheckpoint && g_esGeneral.g_iFlowOffset != -1)
 	{
 		int iArea = SDKCall(g_esGeneral.g_hSDKGetLastKnownArea, survivor);
 		if (iArea)
@@ -978,7 +1002,8 @@ static bool bIsSurvivorInCheckpoint(int survivor, bool start)
 		}
 	}
 
-	return bReturn || (start ? GetEntProp(survivor, Prop_Send, "m_isInMissionStartArea") == 1 : false);
+	bool bReturn2 = start ? (GetEntProp(survivor, Prop_Send, "m_isInMissionStartArea") == 1) : false;
+	return bReturn || bReturn2;
 }
 
 public Action tTimerCombo(Handle timer, DataPack pack)

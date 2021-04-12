@@ -5,13 +5,13 @@
 #include <sdktools>
 #include <adminmenu>
 
-#define PLUGIN_VERSION "2.1"
+#define PLUGIN_VERSION "2.4"
 
 #define CVAR_FLAGS	FCVAR_NOTIFY
 
 public Plugin myinfo =
 {
-	name = "[L4D & L4D2] SM Respawn",
+	name = "[L4D & L4D2] SM Respawn Improved",
 	author = "AtomicStryker & Ivailosp (Modified by Crasher, SilverShot), fork by Dragokas",
 	description = "Allows players to be respawned at one's crosshair.",
 	version = PLUGIN_VERSION,
@@ -26,6 +26,7 @@ ConVar g_cvLoadout;
 ConVar g_cvShowAction;
 ConVar g_cvAddTopMenu;
 ConVar g_cvGameMode;
+ConVar g_cvPosition;
 
 bool g_bLeft4dead2;
 bool g_bMenuAdded;
@@ -44,6 +45,17 @@ int g_iDeadBody[MAXPLAYERS+1];
 	ChangeLog:
 	
 	Fork by Dragokas:
+	
+	2.4 (11-Mar-2021)
+	 - Fixed missing ConVar.
+	 - Added translations: Brazil and Portugal (thanks to Marttt).
+	
+	2.3 (10-Mar-2021)
+	 - Added ConVar "l4d_sm_respawn_position" - Where to respawn? 0 - at crosshair, 1 - next to alive player.
+	 - Added translations: traditional Chinese and Simplified Chinese (thanks to HarryPotter).
+	
+	2.2 (28-Feb-2021)
+	 - Nothing new, just changed filename of GameData to prevent the conflicts.
 	
 	2.1 (17-Apr-2020)
 	 - Fixed that strange code for clearing player's dead body after respawn in L4D2.
@@ -90,12 +102,13 @@ public void OnPluginStart()
 	g_cvLoadout = 		CreateConVar("l4d_sm_respawn_loadout", 		"smg,pistol,pain_pills", "Respawn players with this loadout", CVAR_FLAGS);
 	g_cvShowAction = 	CreateConVar("l4d_sm_respawn_showaction", 	"1", 	"Notify in chat and log action about respawn? (0 - No, 1 - Yes)", CVAR_FLAGS);
 	g_cvAddTopMenu = 	CreateConVar("l4d_sm_respawn_adminmenu", 	"1", 	"Add 'Respawn player' item in admin menu under 'Player commands' category? (0 - No, 1 - Yes)", CVAR_FLAGS);
+	g_cvPosition = 		CreateConVar("l4d_sm_respawn_position", 	"0", 	"Where to respawn? 0 - at crosshair, 1 - next to alive player", CVAR_FLAGS);
 	AutoExecConfig(true, "l4d_sm_respawn");
 	
 	g_cvGameMode = FindConVar("mp_gamemode");
 	
-	Handle hGameData = LoadGameConfigFile("l4drespawn");
-	if (hGameData == null) SetFailState("Could not find gamedata file at addons/sourcemod/gamedata/l4drespawn.txt , you FAILED AT INSTALLING");
+	Handle hGameData = LoadGameConfigFile("l4d_respawn_improved");
+	if( hGameData == null ) SetFailState("Could not find gamedata file at addons/sourcemod/gamedata/l4d_respawn_improved.txt , you FAILED AT INSTALLING");
 	
 	StartPrepSDKCall(SDKCall_Player);
 	if( PrepSDKCall_SetFromConf(hGameData, SDKConf_Signature, "RoundRespawn") == false )
@@ -105,7 +118,7 @@ public void OnPluginStart()
 	else {
 		//PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain); // WTF not work
 		g_hSDKRespawnPlayer = EndPrepSDKCall();
-		if (g_hSDKRespawnPlayer == null) SetFailState("Failed to create SDKCall: RoundRespawn");
+		if( g_hSDKRespawnPlayer == null ) SetFailState("Failed to create SDKCall: RoundRespawn");
 	}
 	
 	int iOffset = GameConfGetOffset(hGameData, "RoundRespawn_Offset");
@@ -376,14 +389,25 @@ bool vRespawnPlayer(int client, int target, float vec[3] = {99999.0, 99999.0, 99
 	bool bShouldTeleport;
 	float ang[3];
 	
-	if( vec[0] != VEC_DUMMY[0] || vec[1] != VEC_DUMMY[1] || vec[2] != VEC_DUMMY[2] )
-	{
-		bShouldTeleport = true;
+	switch( g_cvPosition.IntValue ) {
+		case 0: {
+			if( vec[0] != VEC_DUMMY[0] || vec[1] != VEC_DUMMY[1] || vec[2] != VEC_DUMMY[2] )
+			{
+				bShouldTeleport = true;
+			}
+			else if( GetSpawnEndPoint(client, vec) )
+			{
+				bShouldTeleport = true;
+			}
+		}
+		case 1: {
+			if( GetNearestSpawnPos(client, target, vec) )
+			{
+				bShouldTeleport = true;
+			}
+		}
 	}
-	else if( GetSpawnEndPoint(client, vec) )
-	{
-		bShouldTeleport = true;
-	}
+	
 	if( client )
 	{
 		GetClientEyeAngles(client, ang);
@@ -526,6 +550,34 @@ stock bool GetNonCollideEndPoint(int client, float vEnd[3], float vEndNonCol[3])
 			return true;
 		}
 		delete hTrace;
+	}
+	return false;
+}
+
+bool GetNearestSpawnPos(int client, int target, float vec[3])
+{
+	int team = GetClientTeam(target);
+	if( team == 1 )
+	{
+		return false;
+	}
+	
+	if( client && IsClientInGame(client) && IsPlayerAlive(client) )
+	{
+		if( GetClientTeam(client) == team )
+		{
+			GetClientAbsOrigin(client, vec);
+			return true;
+		}
+	}
+
+	for( int i = 1; i <= MaxClients; i++ )
+	{
+		if( i != target && i != client && IsClientInGame(i) && GetClientTeam(i) == team && IsPlayerAlive(i) )
+		{
+			GetClientAbsOrigin(i, vec);
+			return true;
+		}
 	}
 	return false;
 }

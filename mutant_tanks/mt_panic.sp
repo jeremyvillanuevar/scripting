@@ -1,6 +1,6 @@
 /**
  * Mutant Tanks: a L4D/L4D2 SourceMod Plugin
- * Copyright (C) 2020  Alfred "Crasher_3637/Psyk0tik" Llagas
+ * Copyright (C) 2021  Alfred "Crasher_3637/Psyk0tik" Llagas
  *
  * This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
  *
@@ -25,13 +25,20 @@ public Plugin myinfo =
 	url = MT_URL
 };
 
+bool g_bSecondGame;
+
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	if (!bIsValidGame(false) && !bIsValidGame())
+	switch (GetEngineVersion())
 	{
-		strcopy(error, err_max, "\"[MT] Panic Ability\" only supports Left 4 Dead 1 & 2.");
+		case Engine_Left4Dead: g_bSecondGame = false;
+		case Engine_Left4Dead2: g_bSecondGame = true;
+		default:
+		{
+			strcopy(error, err_max, "\"[MT] Panic Ability\" only supports Left 4 Dead 1 & 2.");
 
-		return APLRes_SilentFailure;
+			return APLRes_SilentFailure;
+		}
 	}
 
 	return APLRes_Success;
@@ -113,6 +120,7 @@ public void OnPluginStart()
 {
 	LoadTranslations("common.phrases");
 	LoadTranslations("mutant_tanks.phrases");
+	LoadTranslations("mutant_tanks_names.phrases");
 
 	RegConsoleCmd("sm_mt_panic", cmdPanicInfo, "View information about the Panic ability.");
 }
@@ -257,7 +265,7 @@ public void MT_OnMenuItemDisplayed(int client, const char[] info, char[] buffer,
 
 public void MT_OnPluginCheck(ArrayList &list)
 {
-	char sName[32];
+	char sName[128];
 	GetPluginFilename(null, sName, sizeof(sName));
 	list.PushString(sName);
 }
@@ -270,7 +278,7 @@ public void MT_OnAbilityCheck(ArrayList &list, ArrayList &list2, ArrayList &list
 	list4.PushString(MT_CONFIG_SECTION4);
 }
 
-public void MT_OnCombineAbilities(int tank, int type, float random, const char[] combo, int survivor, int weapon, const char[] classname)
+public void MT_OnCombineAbilities(int tank, int type, const float random, const char[] combo, int survivor, int weapon, const char[] classname)
 {
 	if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility != 2)
 	{
@@ -419,7 +427,7 @@ public void MT_OnConfigsLoaded(const char[] subsection, const char[] key, const 
 
 public void MT_OnSettingsCached(int tank, bool apply, int type)
 {
-	bool bHuman = MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT);
+	bool bHuman = bIsTank(tank, MT_CHECK_FAKECLIENT);
 	g_esCache[tank].g_flPanicChance = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flPanicChance, g_esAbility[type].g_flPanicChance);
 	g_esCache[tank].g_flPanicInterval = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flPanicInterval, g_esAbility[type].g_flPanicInterval);
 	g_esCache[tank].g_iComboAbility = iGetSettingValue(apply, bHuman, g_esPlayer[tank].g_iComboAbility, g_esAbility[type].g_iComboAbility);
@@ -489,7 +497,7 @@ public void MT_OnAbilityActivated(int tank)
 		return;
 	}
 
-	if (MT_IsTankSupported(tank) && (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iPanicAbility == 1 && g_esCache[tank].g_iComboAbility == 0 && !g_esPlayer[tank].g_bActivated)
+	if (MT_IsTankSupported(tank) && (!bIsTank(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iPanicAbility == 1 && g_esCache[tank].g_iComboAbility == 0 && !g_esPlayer[tank].g_bActivated)
 	{
 		vPanicAbility(tank);
 	}
@@ -597,7 +605,7 @@ static void vPanic(int tank, int pos = -1)
 {
 	g_esPlayer[tank].g_bActivated = true;
 
-	if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+	if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 	{
 		g_esPlayer[tank].g_iAmmoCount++;
 
@@ -633,7 +641,7 @@ static void vPanic2(int tank, int pos = -1)
 
 static void vPanic3(int tank)
 {
-	switch (bIsValidGame())
+	switch (g_bSecondGame)
 	{
 		case true:
 		{
@@ -657,18 +665,18 @@ static void vPanicAbility(int tank)
 		return;
 	}
 
-	if (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
+	if (!bIsTank(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
 	{
 		if (GetRandomFloat(0.1, 100.0) <= g_esCache[tank].g_flPanicChance)
 		{
 			vPanic(tank);
 		}
-		else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+		else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 		{
 			MT_PrintToChat(tank, "%s %t", MT_TAG3, "PanicHuman2");
 		}
 	}
-	else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+	else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 	{
 		MT_PrintToChat(tank, "%s %t", MT_TAG3, "PanicAmmo");
 	}
@@ -678,7 +686,7 @@ static void vPanicRange(int tank, bool idle)
 {
 	if (MT_IsTankSupported(tank, MT_CHECK_INDEX|MT_CHECK_INGAME) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iPanicAbility == 1 && GetRandomFloat(0.1, 100.0) <= g_esCache[tank].g_flPanicChance)
 	{
-		if ((idle && MT_IsTankIdle(tank)) || bIsAreaNarrow(tank, g_esCache[tank].g_flOpenAreasOnly) || MT_DoesTypeRequireHumans(g_esPlayer[tank].g_iTankType) || (g_esCache[tank].g_iRequiresHumans > 0 && iGetHumanCount() < g_esCache[tank].g_iRequiresHumans) || (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && ((!MT_HasAdminAccess(tank) && !bHasAdminAccess(tank, g_esAbility[g_esPlayer[tank].g_iTankType].g_iAccessFlags, g_esPlayer[tank].g_iAccessFlags)) || g_esCache[tank].g_iHumanAbility == 0)))
+		if ((idle && MT_IsTankIdle(tank)) || bIsAreaNarrow(tank, g_esCache[tank].g_flOpenAreasOnly) || MT_DoesTypeRequireHumans(g_esPlayer[tank].g_iTankType) || (g_esCache[tank].g_iRequiresHumans > 0 && iGetHumanCount() < g_esCache[tank].g_iRequiresHumans) || (bIsTank(tank, MT_CHECK_FAKECLIENT) && ((!MT_HasAdminAccess(tank) && !bHasAdminAccess(tank, g_esAbility[g_esPlayer[tank].g_iTankType].g_iAccessFlags, g_esPlayer[tank].g_iAccessFlags)) || g_esCache[tank].g_iHumanAbility == 0)))
 		{
 			return;
 		}
@@ -750,7 +758,7 @@ public Action tTimerPanic(Handle timer, DataPack pack)
 	static int iTime, iCurrentTime;
 	iTime = pack.ReadCell();
 	iCurrentTime = GetTime();
-	if (MT_IsTankSupported(iTank, MT_CHECK_FAKECLIENT) && g_esCache[iTank].g_iHumanAbility == 1 && g_esCache[iTank].g_iHumanMode == 0 && (iTime + g_esCache[iTank].g_iHumanDuration) < iCurrentTime && (g_esPlayer[iTank].g_iCooldown == -1 || g_esPlayer[iTank].g_iCooldown < iCurrentTime))
+	if (bIsTank(iTank, MT_CHECK_FAKECLIENT) && g_esCache[iTank].g_iHumanAbility == 1 && g_esCache[iTank].g_iHumanMode == 0 && (iTime + g_esCache[iTank].g_iHumanDuration) < iCurrentTime && (g_esPlayer[iTank].g_iCooldown == -1 || g_esPlayer[iTank].g_iCooldown < iCurrentTime))
 	{
 		vReset2(iTank);
 

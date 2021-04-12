@@ -1,6 +1,6 @@
 /*
 *	Anti Rush
-*	Copyright (C) 2020 Silvers
+*	Copyright (C) 2021 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.10"
 #define DEBUG_BENCHMARK		0			// 0=Off. 1=Benchmark logic function.
 
 /*======================================================================================
@@ -32,6 +32,13 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (23-Mar-2021)
+	- Cleaning source code from last update.
+	- Fixed potentially using the wrong "add" range from the config.
+
+1.9 (22-Mar-2021)
+	- Added optional config "l4d_anti_rush.cfg" to extend the trigger detection range during certain crescendo events. Requested by "SilentBr".
 
 1.8 (09-Oct-2020)
 	- Changed cvar "l4d_anti_rush_finale" to allow working in Gauntlet type finales only. Thanks to "Xanaguy" for requesting.
@@ -104,6 +111,8 @@ float g_iBenchTicks;
 #define MINIMUM_RANGE		1500.0			// Minimum range for last and lead cvars.
 #define MINIMUM_WARN		1000.0			// Minimum range for warn cvars.
 #define MAX_COMMAND_LENGTH 512
+#define EVENTS_CONFIG		"data/l4d_anti_rush.cfg"
+
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarFinale, g_hCvarIncap, g_hCvarPlayers, g_hCvarRangeLast, g_hCvarRangeLead, g_hCvarSlow, g_hCvarTank, g_hCvarText, g_hCvarTime, g_hCvarType, g_hCvarWarnLast, g_hCvarWarnLead, g_hCvarWarnTime;
 float g_fCvarRangeLast, g_fCvarRangeLead, g_fCvarSlow, g_fCvarTime, g_fCvarWarnLast, g_fCvarWarnLead, g_fCvarWarnTime;
@@ -114,9 +123,14 @@ bool g_bInhibit[MAXPLAYERS+1];
 float g_fHintLast[MAXPLAYERS+1];
 float g_fHintWarn[MAXPLAYERS+1];
 float g_fLastFlow[MAXPLAYERS+1];
-Handle g_hTimerAntiRushHuman;
-//Handle g_hTimerAntiRushBot;
-static bool FinaleStarted; // States whether the finale has started or not
+Handle g_hTimer;
+
+char g_sMap[PLATFORM_MAX_PATH];
+bool g_bFoundMap;
+bool g_bEventStarted;
+float g_fEventExtended;
+bool FinaleStarted; // States whether the finale has started or not
+				 
 
 
 
@@ -158,15 +172,15 @@ public void OnPluginStart()
 	g_hCvarFinale =		CreateConVar(	"l4d_anti_rush_finale",			"2",				"Should the plugin activate in finales. 0=Off. 1=All finales. 2=Gauntlet type finales.", CVAR_FLAGS );
 	g_hCvarIncap =		CreateConVar(	"l4d_anti_rush_incapped",		"0",				"0=Off. How many survivors must be incapped before ignoring them in calculating rushers and slackers.", CVAR_FLAGS );
 	g_hCvarPlayers =	CreateConVar(	"l4d_anti_rush_players",		"3",				"Minimum number of alive survivors before the function kicks in. Must be 3 or greater otherwise the lead/last and average cannot be detected.", CVAR_FLAGS, true, 3.0 );
-	g_hCvarRangeLast =	CreateConVar(	"l4d_anti_rush_range_last",		"3000.0",			"0.0=Off. How far behind someone can travel from the average Survivor distance before being teleported forward.", CVAR_FLAGS );
-	g_hCvarRangeLead =	CreateConVar(	"l4d_anti_rush_range_lead",		"3000.0",			"0.0=Off. How far forward someone can travel from the average Survivor distance before being teleported or slowed down.", CVAR_FLAGS );
+	g_hCvarRangeLast =	CreateConVar(	"l4d_anti_rush_range_last",		"3000.0",			"0.0=Off. How far behind someone can travel from the average Survivor distance before being teleported forward.", CVAR_FLAGS, true, MINIMUM_RANGE );
+	g_hCvarRangeLead =	CreateConVar(	"l4d_anti_rush_range_lead",		"3000.0",			"0.0=Off. How far forward someone can travel from the average Survivor distance before being teleported or slowed down.", CVAR_FLAGS, true, MINIMUM_RANGE );
 	g_hCvarSlow =		CreateConVar(	"l4d_anti_rush_slow",			"75.0",				"Maximum speed someone can travel when being slowed down.", CVAR_FLAGS, true, 20.0 );
 	g_hCvarTank =		CreateConVar(	"l4d_anti_rush_tanks",			"1",				"0=Off. 1=On. Should Anti-Rush be enabled when there are active Tanks.", CVAR_FLAGS );
 	g_hCvarText =		CreateConVar(	"l4d_anti_rush_text",			"1",				"0=Off. 1=Print To Chat. 2=Hint Text. Display a message to someone rushing, or falling behind.", CVAR_FLAGS );
 	g_hCvarTime =		CreateConVar(	"l4d_anti_rush_time",			"10",				"How often to print the message to someone if slowdown is enabled and affecting them.", CVAR_FLAGS );
 	g_hCvarType =		CreateConVar(	"l4d_anti_rush_type",			"1",				"What to do with rushers. 1=Slowdown player speed when moving forward. 2=Teleport back to group.", CVAR_FLAGS );
-	g_hCvarWarnLast =	CreateConVar(	"l4d_anti_rush_warn_last",		"2500.0",			"0.0=Off. How far behind someone can travel from the average Survivor distance before being warned about being teleported.", CVAR_FLAGS );
-	g_hCvarWarnLead =	CreateConVar(	"l4d_anti_rush_warn_lead",		"2500.0",			"0.0=Off. How far forward someone can travel from the average Survivor distance before being warned about being teleported or slowed down.", CVAR_FLAGS );
+	g_hCvarWarnLast =	CreateConVar(	"l4d_anti_rush_warn_last",		"2500.0",			"0.0=Off. How far behind someone can travel from the average Survivor distance before being warned about being teleported.", CVAR_FLAGS, true, MINIMUM_RANGE );
+	g_hCvarWarnLead =	CreateConVar(	"l4d_anti_rush_warn_lead",		"2500.0",			"0.0=Off. How far forward someone can travel from the average Survivor distance before being warned about being teleported or slowed down.", CVAR_FLAGS, true, MINIMUM_RANGE );
 	g_hCvarWarnTime =	CreateConVar(	"l4d_anti_rush_warn_time",		"15.0",				"0.0=Off. How often to print a message to someone warning them they are ahead or behind and will be teleported or slowed down.", CVAR_FLAGS );
 	CreateConVar(						"l4d_anti_rush_version",		PLUGIN_VERSION,		"Anti Rush plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,				"l4d_anti_rush");
@@ -197,7 +211,7 @@ public void OnPluginStart()
 	HookEvent("finale_start", evtFinaleStart);
 	
 	FinaleStarted = false;
-
+	
 	#if DEBUG_BENCHMARK
 	g_Prof = CreateProfiler();
 	#endif
@@ -350,53 +364,180 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 
 
 // ====================================================================================================
+//					HOOK CUSTOM ARLARM EVENTS
+// ====================================================================================================
+int g_iSectionLevel;
+
+void LoadEventConfig()
+{
+	g_bFoundMap = false;
+
+	char sPath[PLATFORM_MAX_PATH];
+	BuildPath(Path_SM, sPath, sizeof(sPath), EVENTS_CONFIG);
+	if( FileExists(sPath) )
+	{
+		ParseConfigFile(sPath);
+	}
+}
+
+bool ParseConfigFile(const char[] file)
+{
+	SMCParser parser = new SMCParser();
+	SMC_SetReaders(parser, ColorConfig_NewSection, ColorConfig_KeyValue, ColorConfig_EndSection);
+	parser.OnEnd = ColorConfig_End;
+
+	char error[128];
+	int line = 0, col = 0;
+	SMCError result = parser.ParseFile(file, line, col);
+
+	if( result != SMCError_Okay )
+	{
+		parser.GetErrorString(result, error, sizeof(error));
+		SetFailState("%s on line %d, col %d of %s [%d]", error, line, col, file, result);
+	}
+
+	delete parser;
+	return (result == SMCError_Okay);
+}
+
+public SMCResult ColorConfig_NewSection(Handle parser, const char[] section, bool quotes)
+{
+	g_iSectionLevel++;
+
+	// Map
+	if( g_iSectionLevel == 2 && strcmp(section, g_sMap) == 0 )
+				   
+	{
+		g_bFoundMap = true;
+	} else {
+		g_bFoundMap = false;
+	}
+
+	return SMCParse_Continue;
+}
+
+public SMCResult ColorConfig_KeyValue(Handle parser, const char[] key, const char[] value, bool key_quotes, bool value_quotes)
+{
+	// On / Off
+	if( g_iSectionLevel == 2 && g_bFoundMap )
+	{
+		if( strcmp(key, "add") == 0 )
+						 
+		{
+			g_fEventExtended = StringToFloat(value);
+		} else {
+			static char sSplit[3][64];
+
+			int len = ExplodeString(value, ":", sSplit, sizeof(sSplit), sizeof(sSplit[]));
+			if( len != 3 )
+			{
+				LogError("Malformed string in l4d_anti_rush.cfg. Section [%s] key [%s] value [%s].", g_sMap, key, value);
+			} else {
+				int entity = FindByClassTargetName(sSplit[0], sSplit[1]);
+				if( entity != INVALID_ENT_REFERENCE )
+				{
+					if( strcmp(key, "1") == 0 )
+					{
+						HookSingleEntityOutput(entity, sSplit[2], OutputStart);
+					}
+					else if( strcmp(key, "0") == 0 )
+					{
+						HookSingleEntityOutput(entity, sSplit[2], OutputStop);
+					}
+				}
+			}
+		}
+	}
+
+	return SMCParse_Continue;
+}
+
+public void OutputStart(const char[] output, int caller, int activator, float delay)
+{
+	PrintToChatAll("[AR] Event Started");
+	PrintToChatAll("[AR] Anti-Rush Disabled");
+	g_bEventStarted = true;
+}
+
+public void OutputStop(const char[] output, int caller, int activator, float delay)
+{
+	PrintToChatAll("[AR] Event Finished");
+	PrintToChatAll("[AR] Anti-Rush Enabled");
+	g_bEventStarted = false;
+}
+
+
+public SMCResult ColorConfig_EndSection(Handle parser)
+{
+	g_iSectionLevel--;
+	return SMCParse_Continue;
+}
+
+public void ColorConfig_End(Handle parser, bool halted, bool failed)
+{
+	if( failed )
+		SetFailState("Error: Cannot load the config file: \"%s\"", EVENTS_CONFIG);
+}
+
+int FindByClassTargetName(const char[] sClass, const char[] sTarget)
+{
+	char sName[64];
+	int entity = INVALID_ENT_REFERENCE;
+
+	// Is targetname numeric?
+	bool numeric = true;
+	for( int i = 0; i < strlen(sTarget); i++ )
+	{
+		if( IsCharNumeric(sTarget[i]) == false )
+		{
+			numeric = false;
+			break;
+		}
+	}
+																				
+
+	// Search by hammer ID or targetname
+	while( (entity = FindEntityByClassname(entity, sClass)) != INVALID_ENT_REFERENCE )
+	{
+		if( numeric )
+		{
+			if( GetEntProp(entity, Prop_Data, "m_iHammerID") == StringToInt(sTarget) ) return entity;
+		} else {
+			GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
+			if( strcmp(sTarget, sName) == 0 ) return entity;
+		}
+	}
+	return INVALID_ENT_REFERENCE;
+}
+
+
+
+// ====================================================================================================
 //					EVENTS
 // ====================================================================================================
 public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	delete g_hTimerAntiRushHuman;
-	//delete g_hTimerAntiRushBot;
-	
-	g_hTimerAntiRushHuman = CreateTimer(1.0, TimerAntiRushHuman, _, TIMER_REPEAT);
+	delete g_hTimer;
 
-
-/*
-
-	bool isGauntlet=false;
-	int entity = FindEntityByClassname(-1, "trigger_finale");
-	if( entity != -1 )
+	// Finales allowed, or not finale
+	if( g_iCvarFinale || (g_iCvarFinale == 0 && L4D_IsMissionFinalMap() == false) )
 	{
-		//if m_type =4 then scavenge
-		if( GetEntProp(entity, Prop_Data, "m_type") != 1 ) isGauntlet=true;
-	}
-	
-
-	if (L4D_IsMissionFinalMap())
-	{
-		// Finales allowed
-		if( g_iCvarFinale == 1)
+		// Gauntlet finale only
+		if( g_iCvarFinale == 2 )
 		{
-			g_hTimerAntiRushHuman = CreateTimer(1.0, TimerAntiRushHuman, _, TIMER_REPEAT);
-			//g_hTimerAntiRushBot = CreateTimer(1.0, TimerAntiRushBot, _, TIMER_REPEAT);
-		}
-		// Finales not allowed
-		else
-		{
-			// Gauntlet finale only
-			if ((g_iCvarFinale == 2)&&isGauntlet) 
+			int entity = FindEntityByClassname(-1, "trigger_finale");
+			if( entity != -1 )
 			{
-				g_hTimerAntiRushHuman = CreateTimer(1.0, TimerAntiRushHuman, _, TIMER_REPEAT);
-				//g_hTimerAntiRushBot = CreateTimer(1.0, TimerAntiRushBot, _, TIMER_REPEAT);
-
-			}		
+				if( GetEntProp(entity, Prop_Data, "m_type") != 1 ) return;
+			}
 		}
-	}//or not finale
-	else
-	{
-		g_hTimerAntiRushHuman = CreateTimer(1.0, TimerAntiRushHuman, _, TIMER_REPEAT);
-		//g_hTimerAntiRushBot = CreateTimer(1.0, TimerAntiRushBot, _, TIMER_REPEAT);
+
+		PrintToChatAll("[AR] Anti-Rush Started");
+		g_hTimer = CreateTimer(1.0, TimerTest, _, TIMER_REPEAT);
+
+		LoadEventConfig();
 	}
-*/
+  
 }
 
 public Action Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -428,13 +569,15 @@ public Action Event_PlayerTeam(Event event, const char[] name, bool dontBroadcas
 public Action evtFinaleStart(Event event, const char[] name, bool dontBroadcast) 
 {
 	LogMessage("[AR] Finale Started");
+	PrintToChatAll("[AR] Finale Started");
+	PrintToChatAll("[AR] Anti-Rush Disabled");
 	FinaleStarted = true;	
 }
 
 //Fires when a bot is attempting to replace a player.
 public void player_bot_replace(Event Spawn_Event, const char[] Spawn_Name, bool Spawn_Broadcast)
 {
-	int client = GetClientOfUserId(Spawn_Event.GetInt("player"));
+	//int client = GetClientOfUserId(Spawn_Event.GetInt("player"));
 	int bot = GetClientOfUserId(Spawn_Event.GetInt("bot"));
 	teleportbotahead(bot);
 }
@@ -442,7 +585,7 @@ public void player_bot_replace(Event Spawn_Event, const char[] Spawn_Name, bool 
 public void bot_player_replace(Event Spawn_Event, const char[] Spawn_Name, bool Spawn_Broadcast)
 {
 	int client = GetClientOfUserId(Spawn_Event.GetInt("player"));
-	int bot = GetClientOfUserId(Spawn_Event.GetInt("bot"));
+	//int bot = GetClientOfUserId(Spawn_Event.GetInt("bot"));
 	teleportbotahead(client);
 	//PrintToChatAll("bot_player_replace %N  place %N", client, bot);
 }
@@ -458,12 +601,14 @@ void teleportbotahead(int client)
 		GetClientAbsOrigin(iAliveSurvivor, vPos);		
 		TeleportEntity(client, vPos, NULL_VECTOR, NULL_VECTOR);
 	}
-}
-
+}										  
+					
 public void OnMapStart()
 {
-	g_bMapStarted = true;	
+	GetCurrentMap(g_sMap, sizeof(g_sMap));
+	g_bMapStarted = true;
 	FinaleStarted = false;
+					   
 }
 
 public void OnMapEnd()
@@ -479,8 +624,10 @@ void ResetPlugin()
 		ResetClient(i);
 	}
 
-	delete g_hTimerAntiRushHuman;
-	//delete g_hTimerAntiRushBot;
+	delete g_hTimer;
+
+	g_fEventExtended = 0.0;
+	g_bEventStarted = false;
 }
 
 void ResetClient(int i)
@@ -511,13 +658,14 @@ void ResetSlowdown()
 // ====================================================================================================
 //					LOGIC
 // ====================================================================================================
-public Action TimerAntiRushHuman(Handle timer)
+public Action TimerTest(Handle timer)
 {
 	if( !g_bMapStarted ) return Plugin_Continue;
 	if (FinaleStarted) RequestFrame(OnNextFrame);
 	#if DEBUG_BENCHMARK
 	StartProfiling(g_Prof);
 	#endif
+
 	static bool bTanks;
 	if( g_iCvarTank == 0 )
 	{
@@ -534,23 +682,34 @@ public Action TimerAntiRushHuman(Handle timer)
 			bTanks = false;
 		}
 	}
+
 	float flow;
+	int clientflowNear;
+	int clientflowFirst;		
 	int count, countflow, index;
 	countflow=0;
-	count=0;	
+	count=0;
+		  
 	// Get survivors flow distance
 	ArrayList aList = new ArrayList(2);
+
 	// Account for incapped
 	int clients[MAXPLAYERS+1];
 	int incapped, client;
+	bool teleportedahead =false;
+
 	// Check valid survivors, count incapped
 	for( int i = 1; i <= MaxClients; i++ )
 	{
 		if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
 		{
 			clients[count++] = i;
-			if( GetEntProp(i, Prop_Send, "m_isIncapacitated", 1) )
-				incapped++;
+
+			if( g_iCvarIncap )
+			{
+				if( GetEntProp(i, Prop_Send, "m_isIncapacitated", 1) )
+					incapped++;
+			}
 		}
 	}
 
@@ -559,9 +718,10 @@ public Action TimerAntiRushHuman(Handle timer)
 		client = clients[i];
 
 		// Ignore incapped
-		if( incapped > g_iCvarIncap)// && GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) )
+		if( g_iCvarIncap && incapped >= g_iCvarIncap && GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) )
+						  
 			continue;
-		
+			
 		// Ignore bot
 		if(IsFakeClient(client))
 			continue;
@@ -580,33 +740,40 @@ public Action TimerAntiRushHuman(Handle timer)
 			SDKUnhook(client, SDKHook_PreThinkPost, PreThinkPost);
 		}
 	}
+
 	// Incase not enough players or some have invalid flow distance, we still need an average.
 	if( countflow >= g_iCvarPlayers )
 	{
 		aList.Sort(Sort_Descending, Sort_Float);
+
 		int clientflowAvg;
-		int clientflowFirst;
-		int clientflowNear;
+					 
 		float lastFlow;
-		float distance;		
-		bool teleportedahead =false;
+		float distance;
+
+
+
 		// Detect rushers
 		if( g_fCvarRangeLead )
 		{
 			// Loop through survivors from highest flow
-			for( int i = 0; i < countflow; i++ )
+			for( int i = 0; i < countflow; i++ )//8jugadores i 0 al 7
 			{
 				client = aList.Get(i, 1);
 				bool flowBack = true;
+
 				// Only check nearest half of survivor pack.
-				if( i < countflow / 2 )
+				if( i < countflow / 2 )//8jugadores i 0 al 3
 				{
 					flow = aList.Get(i, 0);
+
 					// Loop through from next survivor to mid-way through the pack.
-					for( int x = i + 1; x <= countflow / 2; x++ )
+					for( int x = i + 1; x <= countflow / 2; x++ )//8jugadores i 0 x 1 al 4, i 1 x 2 al 4, i 2 x 3 al 4, i 3 x 4 al 4
 					{
 						lastFlow = aList.Get(x, 0);
 						distance = flow - lastFlow;
+						if( g_bEventStarted ) distance -= g_fEventExtended;
+
 						// Warn ahead hint
 						if( g_iCvarText && g_fCvarWarnTime && g_fCvarWarnLead && distance > g_fCvarWarnLead && distance < g_fCvarRangeLead && g_fHintWarn[client] < GetGameTime() )
 						{
@@ -617,11 +784,13 @@ public Action TimerAntiRushHuman(Handle timer)
 							else
 								ClientHintMessage(client, "Warn_Ahead");
 						}
+
 						// Compare higher flow with next survivor, they're rushing
 						if( distance > g_fCvarRangeLead )
 						{
 							// PrintToServer("RUSH: %N %f", client, distance);
 							flowBack = false;
+
 							// Slowdown enabled?
 							if( g_iCvarType == 1 )
 							{
@@ -651,13 +820,18 @@ public Action TimerAntiRushHuman(Handle timer)
 									g_fLastFlow[client] = flow;
 								}
 							}
+
+
+
 							// Teleport enabled?
 							if( g_iCvarType == 2)// &&  IsClientPinned(client) == false )
 							{
 								clientflowNear = aList.Get(1, 1);
-								//clientflowAvg = aList.Get(x, 1);
+								//clientAvg = aList.Get(x, 1);										  
 								float vPos[3];
 								GetClientAbsOrigin(clientflowNear, vPos);
+								//GetClientAbsOrigin(clientAvg, vPos);
+
 								// Hint
 								if( g_iCvarText)
 								{
@@ -669,12 +843,14 @@ public Action TimerAntiRushHuman(Handle timer)
 								Format(rawmsg, sizeof(rawmsg), "%T", "Friend_comeback", client,PlayerName);
 								CPrintToChatAll("%s",rawmsg);
 								TeleportEntity(client, vPos, NULL_VECTOR, NULL_VECTOR);
-								teleportedahead =true;
+								teleportedahead =true;							  
 							}
+
 							break;
 						}
 					}
 				}
+
 				// Running back, allow full speed
 				if( flowBack && g_bInhibit[client] == true )
 				{
@@ -683,51 +859,102 @@ public Action TimerAntiRushHuman(Handle timer)
 				}
 			}
 		}
+	}
+	else
+	{
+		ResetSlowdown();
+	}
+
+
+
+	aList.Clear();
+
+	countflow=0;
+	count=0;
+	
+	for( int i = 0; i < count; i++ )
+	{
+		client = clients[i];
+
+		// Ignore incapped
+		if( g_iCvarIncap && incapped >= g_iCvarIncap && GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) )
+						  
+			continue;
+			
+		// Ignore bot
+		if(IsFakeClient(client))
+			continue;
+
+		flow = L4D2Direct_GetFlowDistance(client);
+		if( flow && flow != -9999.0 ) // Invalid flows
+		{
+			countflow++;
+			index = aList.Push(flow);
+			aList.Set(index, client, 1);
+		}
+		// Reset slowdown if players flow is invalid
+		else if( g_bInhibit[client] == true )
+		{
+			g_bInhibit[client] = false;
+			SDKUnhook(client, SDKHook_PreThinkPost, PreThinkPost);
+		}
+	}
+
+
+
+	// Incase not enough players or some have invalid flow distance, we still need an average.
+	if( countflow >= g_iCvarPlayers )
+	{
+		aList.Sort(Sort_Descending, Sort_Float);
+
+		int clientflowAvg;
+					 
+		float lastFlow;
+		float distance;
+
 		// Teleport slacker
 		if( g_fCvarRangeLast )
 		{
 			// Loop through survivors from lowest flow to mid-way through the pack.
-			for( int i = countflow - 1; i > countflow / 2; i-- )
+			for( int i = countflow - 1; i > countflow / 2; i-- )//8 jugadores i 7 al 5//9 j i 8 al 5
 			{
 				flow = aList.Get(i, 0);
 				client = aList.Get(i, 1);
+
 				// Loop through from next survivor to mid-way through the pack.
-				for( int x = i - 1; x < countflow; x++ )
+				for( int x = i - 1; x < countflow; x++ )//8jugadores i 7 x 6 al 7, i 6 x 5 al 7, i 5 x 4 al 7//9j i 8 x 7 al 8
 				{
 					lastFlow = aList.Get(x, 0);
 					distance = lastFlow - flow;
+					if( g_bEventStarted ) distance -= g_fEventExtended;
+
 					// Warn behind hint
 					if( g_iCvarText && g_fCvarWarnTime && g_fCvarWarnLast && distance > g_fCvarWarnLast && distance < g_fCvarRangeLead && g_fHintWarn[client] < GetGameTime() )
 					{
 						g_fHintWarn[client] = GetGameTime() + g_fCvarWarnTime;
+
 						ClientHintMessage(client, "Warn_Behind");
 					}
+
 					// Compare lower flow with next survivor, they're behind
-					if (teleportedahead)
-					{					
-						float vPos[3];
-						GetClientAbsOrigin(clientflowNear, vPos);				
-						// Hint
-						if( g_iCvarText )
-						{
-							ClientHintMessage(client, "Rush_Behind");
-						}
-						TeleportEntity(client, vPos, NULL_VECTOR, NULL_VECTOR);
-						break;		
-					}
-					else
-					if( (distance > g_fCvarRangeLast))// || teleportedahead)// && IsClientPinned(client) == false )
+					if( (distance > g_fCvarRangeLast) || teleportedahead)// && IsClientPinned(client) == false )
 					{
 						clientflowFirst = aList.Get(0, 1);
 						// PrintToServer("SLOW: %N %f", client, distance);
-						clientflowAvg = aList.Get(x, 1);
+						clientflowAvg = aList.Get(x, 1);//clientAvg = aList.Get(x, 1);
 						float vPos[3];
-						GetClientAbsOrigin(clientflowAvg, vPos);
+						if (teleportedahead)
+							GetClientAbsOrigin(clientflowNear, vPos);
+						else
+						if (distance > g_fCvarRangeLast)
+							GetClientAbsOrigin(clientflowAvg, vPos);//GetClientAbsOrigin(clientAvg, vPos);
+
 						// Hint
 						if( g_iCvarText )
 						{
 							ClientHintMessage(client, "Rush_Behind");
 						}
+
 						TeleportEntity(client, vPos, NULL_VECTOR, NULL_VECTOR);
 						break;
 					}
@@ -757,11 +984,11 @@ public Action TimerAntiRushHuman(Handle timer)
 }
 
 
-
 public void OnNextFrame()
 {
-	delete g_hTimerAntiRushHuman;	
+	delete g_hTimer;	
 }
+
 
 /* Remove this line to enable, if you want to limit speed (slower) than default when walking/crouched.
 public Action L4D_OnGetCrouchTopSpeed(int target, float &retVal)
@@ -817,7 +1044,9 @@ void ReplaceColors(char[] translation, int size, bool hint)
 
 bool IsClientPinned(int client)
 {
-	if( GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0 ||
+	if( GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) ||
+		GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1) ||
+		GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0 ||
 		GetEntPropEnt(client, Prop_Send, "m_pounceAttacker") > 0
 	) return true;
 
@@ -827,15 +1056,6 @@ bool IsClientPinned(int client)
 		GetEntPropEnt(client, Prop_Send, "m_carryAttacker") > 0 ||
 		GetEntPropEnt(client, Prop_Send, "m_pummelAttacker") > 0
 	)) return true;
-
-	return false;
-}
-
-bool IsClientBehind(int client)
-{
-	if( GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) ||
-		GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1)		
-	) return true;
 
 	return false;
 }

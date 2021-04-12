@@ -1,6 +1,6 @@
 /**
  * Mutant Tanks: a L4D/L4D2 SourceMod Plugin
- * Copyright (C) 2020  Alfred "Crasher_3637/Psyk0tik" Llagas
+ * Copyright (C) 2021  Alfred "Crasher_3637/Psyk0tik" Llagas
  *
  * This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
  *
@@ -25,15 +25,20 @@ public Plugin myinfo =
 	url = MT_URL
 };
 
-bool g_bLateLoad;
+bool g_bLateLoad, g_bSecondGame;
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	if (!bIsValidGame(false) && !bIsValidGame())
+	switch (GetEngineVersion())
 	{
-		strcopy(error, err_max, "\"[MT] Rocket Ability\" only supports Left 4 Dead 1 & 2.");
+		case Engine_Left4Dead: g_bSecondGame = false;
+		case Engine_Left4Dead2: g_bSecondGame = true;
+		default:
+		{
+			strcopy(error, err_max, "\"[MT] Rocket Ability\" only supports Left 4 Dead 1 & 2.");
 
-		return APLRes_SilentFailure;
+			return APLRes_SilentFailure;
+		}
 	}
 
 	g_bLateLoad = late;
@@ -140,6 +145,7 @@ public void OnPluginStart()
 {
 	LoadTranslations("common.phrases");
 	LoadTranslations("mutant_tanks.phrases");
+	LoadTranslations("mutant_tanks_names.phrases");
 
 	RegConsoleCmd("sm_mt_rocket", cmdRocketInfo, "View information about the Rocket ability.");
 
@@ -299,7 +305,7 @@ public void MT_OnMenuItemDisplayed(int client, const char[] info, char[] buffer,
 
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if (MT_IsCorePluginEnabled() && bIsValidClient(victim, MT_CHECK_INDEX|MT_CHECK_INGAME|MT_CHECK_ALIVE) && bIsValidEntity(inflictor) && damage >= 0.5)
+	if (MT_IsCorePluginEnabled() && bIsValidClient(victim, MT_CHECK_INDEX|MT_CHECK_INGAME|MT_CHECK_ALIVE) && bIsValidEntity(inflictor) && damage > 0.0)
 	{
 		static char sClassname[32];
 		GetEntityClassname(inflictor, sClassname, sizeof(sClassname));
@@ -334,7 +340,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 
 public void MT_OnPluginCheck(ArrayList &list)
 {
-	char sName[32];
+	char sName[128];
 	GetPluginFilename(null, sName, sizeof(sName));
 	list.PushString(sName);
 }
@@ -347,7 +353,7 @@ public void MT_OnAbilityCheck(ArrayList &list, ArrayList &list2, ArrayList &list
 	list4.PushString(MT_CONFIG_SECTION4);
 }
 
-public void MT_OnCombineAbilities(int tank, int type, float random, const char[] combo, int survivor, int weapon, const char[] classname)
+public void MT_OnCombineAbilities(int tank, int type, const float random, const char[] combo, int survivor, int weapon, const char[] classname)
 {
 	if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility != 2)
 	{
@@ -556,7 +562,7 @@ public void MT_OnConfigsLoaded(const char[] subsection, const char[] key, const 
 
 public void MT_OnSettingsCached(int tank, bool apply, int type)
 {
-	bool bHuman = MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT);
+	bool bHuman = bIsTank(tank, MT_CHECK_FAKECLIENT);
 	g_esCache[tank].g_flRocketChance = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flRocketChance, g_esAbility[type].g_flRocketChance);
 	g_esCache[tank].g_flRocketDelay = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flRocketDelay, g_esAbility[type].g_flRocketDelay);
 	g_esCache[tank].g_flRocketRange = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flRocketRange, g_esAbility[type].g_flRocketRange);
@@ -626,7 +632,7 @@ public void MT_OnEventFired(Event event, const char[] name, bool dontBroadcast)
 		{
 			vRemoveRocket(iPlayer);
 		}
-		else if (bIsSurvivor(iPlayer, MT_CHECK_INDEX|MT_CHECK_INGAME) && bIsValidGame())
+		else if (bIsSurvivor(iPlayer, MT_CHECK_INDEX|MT_CHECK_INGAME) && g_bSecondGame)
 		{
 			int iBody = -1;
 			while ((iBody = FindEntityByClassname(iBody, "survivor_death_model")) != INVALID_ENT_REFERENCE)
@@ -654,7 +660,7 @@ public void MT_OnAbilityActivated(int tank)
 		return;
 	}
 
-	if (MT_IsTankSupported(tank) && (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iRocketAbility == 1 && g_esCache[tank].g_iComboAbility == 0)
+	if (MT_IsTankSupported(tank) && (!bIsTank(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iRocketAbility == 1 && g_esCache[tank].g_iComboAbility == 0)
 	{
 		vRocketAbility(tank, GetRandomFloat(0.1, 100.0));
 	}
@@ -748,7 +754,7 @@ static void vRocketAbility(int tank, float random, int pos = -1)
 		return;
 	}
 
-	if (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
+	if (!bIsTank(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
 	{
 		g_esPlayer[tank].g_bFailed = false;
 		g_esPlayer[tank].g_bNoAmmo = false;
@@ -775,13 +781,13 @@ static void vRocketAbility(int tank, float random, int pos = -1)
 
 		if (iSurvivorCount == 0)
 		{
-			if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+			if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 			{
 				MT_PrintToChat(tank, "%s %t", MT_TAG3, "RocketHuman4");
 			}
 		}
 	}
-	else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+	else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 	{
 		MT_PrintToChat(tank, "%s %t", MT_TAG3, "RocketAmmo");
 	}
@@ -794,9 +800,9 @@ static void vRocketHit(int survivor, int tank, float random, float chance, int e
 		return;
 	}
 
-	if (enabled == 1 && bIsSurvivor(survivor))
+	if (enabled == 1 && bIsSurvivor(survivor) && !MT_DoesSurvivorHaveRewardType(survivor, MT_REWARD_GODMODE))
 	{
-		if (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
+		if (!bIsTank(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
 		{
 			static int iTime;
 			iTime = GetTime();
@@ -809,7 +815,7 @@ static void vRocketHit(int survivor, int tank, float random, float chance, int e
 					g_esPlayer[survivor].g_bAffected = true;
 					g_esPlayer[survivor].g_iOwner = tank;
 
-					if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && (flags & MT_ATTACK_RANGE) && (g_esPlayer[tank].g_iCooldown == -1 || g_esPlayer[tank].g_iCooldown < iTime))
+					if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && (flags & MT_ATTACK_RANGE) && (g_esPlayer[tank].g_iCooldown == -1 || g_esPlayer[tank].g_iCooldown < iTime))
 					{
 						g_esPlayer[tank].g_iAmmoCount++;
 
@@ -840,7 +846,6 @@ static void vRocketHit(int survivor, int tank, float random, float chance, int e
 					DispatchKeyValue(iFlame, "JetLength", "400");
 
 					SetEntityRenderColor(iFlame, 180, 70, 10, 180);
-
 					TeleportEntity(iFlame, flPosition, flAngles, NULL_VECTOR);
 					DispatchSpawn(iFlame);
 					vSetEntityParent(iFlame, survivor);
@@ -848,6 +853,7 @@ static void vRocketHit(int survivor, int tank, float random, float chance, int e
 					iFlame = EntIndexToEntRef(iFlame);
 					vDeleteEntity(iFlame, 3.0);
 
+					vEffect(survivor, tank, g_esCache[tank].g_iRocketEffect, flags);
 					EmitSoundToAll(SOUND_FIRE, survivor, _, _, _, 1.0);
 
 					static float flDelay;
@@ -867,13 +873,11 @@ static void vRocketHit(int survivor, int tank, float random, float chance, int e
 					dpRocketDetonate.WriteCell(g_esPlayer[tank].g_iTankType);
 					dpRocketDetonate.WriteCell(enabled);
 					dpRocketDetonate.WriteCell(messages);
-
-					vEffect(survivor, tank, g_esCache[tank].g_iRocketEffect, flags);
 				}
 			}
 			else if ((flags & MT_ATTACK_RANGE) && (g_esPlayer[tank].g_iCooldown == -1 || g_esPlayer[tank].g_iCooldown < iTime))
 			{
-				if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bFailed)
+				if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bFailed)
 				{
 					g_esPlayer[tank].g_bFailed = true;
 
@@ -881,7 +885,7 @@ static void vRocketHit(int survivor, int tank, float random, float chance, int e
 				}
 			}
 		}
-		else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bNoAmmo)
+		else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bNoAmmo)
 		{
 			g_esPlayer[tank].g_bNoAmmo = true;
 
@@ -890,7 +894,7 @@ static void vRocketHit(int survivor, int tank, float random, float chance, int e
 	}
 }
 
-public void vRemoveBody(int userid)
+public void vRemoveRocketBody(int userid)
 {
 	int iSurvivor = GetClientOfUserId(userid);
 	if (!bIsSurvivor(iSurvivor, MT_CHECK_INDEX|MT_CHECK_INGAME))
@@ -976,7 +980,7 @@ public Action tTimerRocketLaunch(Handle timer, DataPack pack)
 	iTank = GetClientOfUserId(pack.ReadCell());
 	iType = pack.ReadCell();
 	iRocketEnabled = pack.ReadCell();
-	if (!MT_IsTankSupported(iTank) || bIsAreaNarrow(iTank, g_esCache[iTank].g_flOpenAreasOnly) || MT_DoesTypeRequireHumans(g_esPlayer[iTank].g_iTankType) || (g_esCache[iTank].g_iRequiresHumans > 0 && iGetHumanCount() < g_esCache[iTank].g_iRequiresHumans) || (!MT_HasAdminAccess(iTank) && !bHasAdminAccess(iTank, g_esAbility[g_esPlayer[iTank].g_iTankType].g_iAccessFlags, g_esPlayer[iTank].g_iAccessFlags)) || !MT_IsTypeEnabled(g_esPlayer[iTank].g_iTankType) || !MT_IsCustomTankSupported(iTank) || iType != g_esPlayer[iTank].g_iTankType || MT_IsAdminImmune(iSurvivor, iTank) || bIsAdminImmune(iSurvivor, g_esPlayer[iTank].g_iTankType, g_esAbility[g_esPlayer[iTank].g_iTankType].g_iImmunityFlags, g_esPlayer[iSurvivor].g_iImmunityFlags) || iRocketEnabled == 0 || !g_esPlayer[iSurvivor].g_bAffected)
+	if (!MT_IsTankSupported(iTank) || bIsAreaNarrow(iTank, g_esCache[iTank].g_flOpenAreasOnly) || MT_DoesTypeRequireHumans(g_esPlayer[iTank].g_iTankType) || (g_esCache[iTank].g_iRequiresHumans > 0 && iGetHumanCount() < g_esCache[iTank].g_iRequiresHumans) || (!MT_HasAdminAccess(iTank) && !bHasAdminAccess(iTank, g_esAbility[g_esPlayer[iTank].g_iTankType].g_iAccessFlags, g_esPlayer[iTank].g_iAccessFlags)) || !MT_IsTypeEnabled(g_esPlayer[iTank].g_iTankType) || !MT_IsCustomTankSupported(iTank) || iType != g_esPlayer[iTank].g_iTankType || MT_IsAdminImmune(iSurvivor, iTank) || bIsAdminImmune(iSurvivor, g_esPlayer[iTank].g_iTankType, g_esAbility[g_esPlayer[iTank].g_iTankType].g_iImmunityFlags, g_esPlayer[iSurvivor].g_iImmunityFlags) || iRocketEnabled == 0 || !g_esPlayer[iSurvivor].g_bAffected || MT_DoesSurvivorHaveRewardType(iSurvivor, MT_REWARD_GODMODE))
 	{
 		vReset2(iSurvivor);
 
@@ -1015,7 +1019,7 @@ public Action tTimerRocketDetonate(Handle timer, DataPack pack)
 	iTank = GetClientOfUserId(pack.ReadCell());
 	iType = pack.ReadCell();
 	iRocketEnabled = pack.ReadCell();
-	if (!MT_IsTankSupported(iTank) || bIsAreaNarrow(iTank, g_esCache[iTank].g_flOpenAreasOnly) || MT_DoesTypeRequireHumans(g_esPlayer[iTank].g_iTankType) || (g_esCache[iTank].g_iRequiresHumans > 0 && iGetHumanCount() < g_esCache[iTank].g_iRequiresHumans) || (!MT_HasAdminAccess(iTank) && !bHasAdminAccess(iTank, g_esAbility[g_esPlayer[iTank].g_iTankType].g_iAccessFlags, g_esPlayer[iTank].g_iAccessFlags)) || !MT_IsTypeEnabled(g_esPlayer[iTank].g_iTankType) || !MT_IsCustomTankSupported(iTank) || iType != g_esPlayer[iTank].g_iTankType || MT_IsAdminImmune(iSurvivor, iTank) || bIsAdminImmune(iSurvivor, g_esPlayer[iTank].g_iTankType, g_esAbility[g_esPlayer[iTank].g_iTankType].g_iImmunityFlags, g_esPlayer[iSurvivor].g_iImmunityFlags) || iRocketEnabled == 0 || !g_esPlayer[iSurvivor].g_bAffected)
+	if (!MT_IsTankSupported(iTank) || bIsAreaNarrow(iTank, g_esCache[iTank].g_flOpenAreasOnly) || MT_DoesTypeRequireHumans(g_esPlayer[iTank].g_iTankType) || (g_esCache[iTank].g_iRequiresHumans > 0 && iGetHumanCount() < g_esCache[iTank].g_iRequiresHumans) || (!MT_HasAdminAccess(iTank) && !bHasAdminAccess(iTank, g_esAbility[g_esPlayer[iTank].g_iTankType].g_iAccessFlags, g_esPlayer[iTank].g_iAccessFlags)) || !MT_IsTypeEnabled(g_esPlayer[iTank].g_iTankType) || !MT_IsCustomTankSupported(iTank) || iType != g_esPlayer[iTank].g_iTankType || MT_IsAdminImmune(iSurvivor, iTank) || bIsAdminImmune(iSurvivor, g_esPlayer[iTank].g_iTankType, g_esAbility[g_esPlayer[iTank].g_iTankType].g_iImmunityFlags, g_esPlayer[iSurvivor].g_iImmunityFlags) || iRocketEnabled == 0 || !g_esPlayer[iSurvivor].g_bAffected || MT_DoesSurvivorHaveRewardType(iSurvivor, MT_REWARD_GODMODE))
 	{
 		vReset2(iSurvivor);
 
@@ -1033,7 +1037,7 @@ public Action tTimerRocketDetonate(Handle timer, DataPack pack)
 
 	if (g_esCache[iTank].g_iRocketBody == 1)
 	{
-		RequestFrame(vRemoveBody, GetClientUserId(iSurvivor));
+		RequestFrame(vRemoveRocketBody, GetClientUserId(iSurvivor));
 	}
 
 	g_esPlayer[iSurvivor].g_bAffected = false;

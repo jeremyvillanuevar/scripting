@@ -1,6 +1,6 @@
 /**
  * Mutant Tanks: a L4D/L4D2 SourceMod Plugin
- * Copyright (C) 2020  Alfred "Crasher_3637/Psyk0tik" Llagas
+ * Copyright (C) 2021  Alfred "Crasher_3637/Psyk0tik" Llagas
  *
  * This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
  *
@@ -27,7 +27,8 @@ public Plugin myinfo =
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	if (!bIsValidGame(false) && !bIsValidGame())
+	EngineVersion evEngine = GetEngineVersion();
+	if (evEngine != Engine_Left4Dead && evEngine != Engine_Left4Dead2)
 	{
 		strcopy(error, err_max, "\"[MT] Car Ability\" only supports Left 4 Dead 1 & 2.");
 
@@ -65,6 +66,7 @@ enum struct esPlayer
 	int g_iCarDuration;
 	int g_iCarMessage;
 	int g_iCarOptions;
+	int g_iCarOwner;
 	int g_iCooldown;
 	int g_iComboAbility;
 	int g_iHumanAbility;
@@ -90,6 +92,7 @@ enum struct esAbility
 	int g_iCarDuration;
 	int g_iCarMessage;
 	int g_iCarOptions;
+	int g_iCarOwner;
 	int g_iComboAbility;
 	int g_iHumanAbility;
 	int g_iHumanAmmo;
@@ -112,6 +115,7 @@ enum struct esCache
 	int g_iCarDuration;
 	int g_iCarMessage;
 	int g_iCarOptions;
+	int g_iCarOwner;
 	int g_iComboAbility;
 	int g_iHumanAbility;
 	int g_iHumanAmmo;
@@ -126,6 +130,7 @@ public void OnPluginStart()
 {
 	LoadTranslations("common.phrases");
 	LoadTranslations("mutant_tanks.phrases");
+	LoadTranslations("mutant_tanks_names.phrases");
 
 	RegConsoleCmd("sm_mt_car", cmdCarInfo, "View information about the Car ability.");
 }
@@ -280,7 +285,7 @@ public Action StartTouch(int car, int other)
 
 public void MT_OnPluginCheck(ArrayList &list)
 {
-	char sName[32];
+	char sName[128];
 	GetPluginFilename(null, sName, sizeof(sName));
 	list.PushString(sName);
 }
@@ -293,7 +298,7 @@ public void MT_OnAbilityCheck(ArrayList &list, ArrayList &list2, ArrayList &list
 	list4.PushString(MT_CONFIG_SECTION4);
 }
 
-public void MT_OnCombineAbilities(int tank, int type, float random, const char[] combo, int survivor, int weapon, const char[] classname)
+public void MT_OnCombineAbilities(int tank, int type, const float random, const char[] combo, int survivor, int weapon, const char[] classname)
 {
 	if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility != 2)
 	{
@@ -362,6 +367,7 @@ public void MT_OnConfigsLoad(int mode)
 				g_esAbility[iIndex].g_flCarChance = 33.3;
 				g_esAbility[iIndex].g_iCarDuration = 5;
 				g_esAbility[iIndex].g_iCarOptions = 0;
+				g_esAbility[iIndex].g_iCarOwner = 1;
 				g_esAbility[iIndex].g_flCarInterval = 0.6;
 				g_esAbility[iIndex].g_flCarLifetime = 30.0;
 				g_esAbility[iIndex].g_flCarRadius[0] = -180.0;
@@ -387,6 +393,7 @@ public void MT_OnConfigsLoad(int mode)
 					g_esPlayer[iPlayer].g_flCarChance = 0.0;
 					g_esPlayer[iPlayer].g_iCarDuration = 0;
 					g_esPlayer[iPlayer].g_iCarOptions = 0;
+					g_esPlayer[iPlayer].g_iCarOwner = 0;
 					g_esPlayer[iPlayer].g_flCarInterval = 0.0;
 					g_esPlayer[iPlayer].g_flCarLifetime = 0.0;
 					g_esPlayer[iPlayer].g_flCarRadius[0] = 0.0;
@@ -415,6 +422,7 @@ public void MT_OnConfigsLoaded(const char[] subsection, const char[] key, const 
 		g_esPlayer[admin].g_flCarInterval = flGetKeyValue(subsection, MT_CONFIG_SECTIONS, key, "CarInterval", "Car Interval", "Car_Interval", "interval", g_esPlayer[admin].g_flCarInterval, value, 0.1, 1.0);
 		g_esPlayer[admin].g_flCarLifetime = flGetKeyValue(subsection, MT_CONFIG_SECTIONS, key, "CarLifetime", "Car Lifetime", "Car_Lifetime", "lifetime", g_esPlayer[admin].g_flCarLifetime, value, 0.1, 999999.0);
 		g_esPlayer[admin].g_iCarOptions = iGetKeyValue(subsection, MT_CONFIG_SECTIONS, key, "CarOptions", "Car Options", "Car_Options", "options", g_esPlayer[admin].g_iCarOptions, value, 0, 7);
+		g_esPlayer[admin].g_iCarOwner = iGetKeyValue(subsection, MT_CONFIG_SECTIONS, key, "CarOwner", "Car Owner", "Car_Owner", "owner", g_esPlayer[admin].g_iCarOwner, value, 0, 1);
 
 		if (StrEqual(subsection, MT_CONFIG_SECTION, false) || StrEqual(subsection, MT_CONFIG_SECTION2, false) || StrEqual(subsection, MT_CONFIG_SECTION3, false) || StrEqual(subsection, MT_CONFIG_SECTION4, false))
 		{
@@ -451,6 +459,7 @@ public void MT_OnConfigsLoaded(const char[] subsection, const char[] key, const 
 		g_esAbility[type].g_flCarInterval = flGetKeyValue(subsection, MT_CONFIG_SECTIONS, key, "CarInterval", "Car Interval", "Car_Interval", "interval", g_esAbility[type].g_flCarInterval, value, 0.1, 1.0);
 		g_esAbility[type].g_flCarLifetime = flGetKeyValue(subsection, MT_CONFIG_SECTIONS, key, "CarLifetime", "Car Lifetime", "Car_Lifetime", "lifetime", g_esAbility[type].g_flCarLifetime, value, 0.1, 999999.0);
 		g_esAbility[type].g_iCarOptions = iGetKeyValue(subsection, MT_CONFIG_SECTIONS, key, "CarOptions", "Car Options", "Car_Options", "options", g_esAbility[type].g_iCarOptions, value, 0, 7);
+		g_esAbility[type].g_iCarOwner = iGetKeyValue(subsection, MT_CONFIG_SECTIONS, key, "CarOwner", "Car Owner", "Car_Owner", "owner", g_esAbility[type].g_iCarOwner, value, 0, 1);
 
 		if (StrEqual(subsection, MT_CONFIG_SECTION, false) || StrEqual(subsection, MT_CONFIG_SECTION2, false) || StrEqual(subsection, MT_CONFIG_SECTION3, false) || StrEqual(subsection, MT_CONFIG_SECTION4, false))
 		{
@@ -474,7 +483,7 @@ public void MT_OnConfigsLoaded(const char[] subsection, const char[] key, const 
 
 public void MT_OnSettingsCached(int tank, bool apply, int type)
 {
-	bool bHuman = MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT);
+	bool bHuman = bIsTank(tank, MT_CHECK_FAKECLIENT);
 	g_esCache[tank].g_flCarChance = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flCarChance, g_esAbility[type].g_flCarChance);
 	g_esCache[tank].g_flCarInterval = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flCarInterval, g_esAbility[type].g_flCarInterval);
 	g_esCache[tank].g_flCarLifetime = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flCarLifetime, g_esAbility[type].g_flCarLifetime);
@@ -484,6 +493,7 @@ public void MT_OnSettingsCached(int tank, bool apply, int type)
 	g_esCache[tank].g_iCarDuration = iGetSettingValue(apply, bHuman, g_esPlayer[tank].g_iCarDuration, g_esAbility[type].g_iCarDuration);
 	g_esCache[tank].g_iCarMessage = iGetSettingValue(apply, bHuman, g_esPlayer[tank].g_iCarMessage, g_esAbility[type].g_iCarMessage);
 	g_esCache[tank].g_iCarOptions = iGetSettingValue(apply, bHuman, g_esPlayer[tank].g_iCarOptions, g_esAbility[type].g_iCarOptions);
+	g_esCache[tank].g_iCarOwner = iGetSettingValue(apply, bHuman, g_esPlayer[tank].g_iCarOwner, g_esAbility[type].g_iCarOwner);
 	g_esCache[tank].g_iComboAbility = iGetSettingValue(apply, bHuman, g_esPlayer[tank].g_iComboAbility, g_esAbility[type].g_iComboAbility);
 	g_esCache[tank].g_iHumanAbility = iGetSettingValue(apply, bHuman, g_esPlayer[tank].g_iHumanAbility, g_esAbility[type].g_iHumanAbility);
 	g_esCache[tank].g_iHumanAmmo = iGetSettingValue(apply, bHuman, g_esPlayer[tank].g_iHumanAmmo, g_esAbility[type].g_iHumanAmmo);
@@ -547,7 +557,7 @@ public void MT_OnAbilityActivated(int tank)
 		return;
 	}
 
-	if (MT_IsTankSupported(tank) && (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iCarAbility == 1 && g_esCache[tank].g_iComboAbility == 0 && !g_esPlayer[tank].g_bActivated)
+	if (MT_IsTankSupported(tank) && (!bIsTank(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iCarAbility == 1 && g_esCache[tank].g_iComboAbility == 0 && !g_esPlayer[tank].g_bActivated)
 	{
 		vCarAbility(tank);
 	}
@@ -647,7 +657,7 @@ static void vCar(int tank, int pos = -1)
 
 	vCar2(tank, pos);
 
-	if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+	if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 	{
 		g_esPlayer[tank].g_iAmmoCount++;
 
@@ -687,18 +697,18 @@ static void vCarAbility(int tank)
 		return;
 	}
 
-	if (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
+	if (!bIsTank(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
 	{
 		if (GetRandomFloat(0.1, 100.0) <= g_esCache[tank].g_flCarChance)
 		{
 			vCar(tank);
 		}
-		else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+		else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 		{
 			MT_PrintToChat(tank, "%s %t", MT_TAG3, "CarHuman2");
 		}
 	}
-	else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+	else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 	{
 		MT_PrintToChat(tank, "%s %t", MT_TAG3, "CarAmmo");
 	}
@@ -770,11 +780,11 @@ public Action tTimerCar(Handle timer, DataPack pack)
 	iPos = pack.ReadCell();
 	iDuration = (iPos != -1) ? RoundToNearest(MT_GetCombinationSetting(iTank, 4, iPos)) : g_esCache[iTank].g_iCarDuration;
 	iCurrentTime = GetTime();
-	if (g_esCache[iTank].g_iCarAbility == 0 || bIsAreaNarrow(iTank, g_esCache[iTank].g_flOpenAreasOnly) || ((!MT_IsTankSupported(iTank, MT_CHECK_FAKECLIENT) || (g_esCache[iTank].g_iHumanAbility == 1 && g_esCache[iTank].g_iHumanMode == 0)) && (iTime + iDuration) < iCurrentTime))
+	if (g_esCache[iTank].g_iCarAbility == 0 || bIsAreaNarrow(iTank, g_esCache[iTank].g_flOpenAreasOnly) || ((!bIsTank(iTank, MT_CHECK_FAKECLIENT) || (g_esCache[iTank].g_iHumanAbility == 1 && g_esCache[iTank].g_iHumanMode == 0)) && (iTime + iDuration) < iCurrentTime))
 	{
 		vReset2(iTank);
 
-		if (MT_IsTankSupported(iTank, MT_CHECK_FAKECLIENT) && g_esCache[iTank].g_iHumanAbility == 1 && g_esCache[iTank].g_iHumanMode == 0 && (g_esPlayer[iTank].g_iCooldown == -1 || g_esPlayer[iTank].g_iCooldown < iCurrentTime))
+		if (bIsTank(iTank, MT_CHECK_FAKECLIENT) && g_esCache[iTank].g_iHumanAbility == 1 && g_esCache[iTank].g_iHumanMode == 0 && (g_esPlayer[iTank].g_iCooldown == -1 || g_esPlayer[iTank].g_iCooldown < iCurrentTime))
 		{
 			vReset3(iTank);
 		}
@@ -850,6 +860,11 @@ public Action tTimerCar(Handle timer, DataPack pack)
 			}
 
 			SetEntityRenderColor(iCar, iCarColor[0], iCarColor[1], iCarColor[2], 255);
+
+			if (g_esCache[iTank].g_iCarOwner == 1)
+			{
+				SetEntPropEnt(iCar, Prop_Send, "m_hOwnerEntity", iTank);
+			}
 
 			static float flVelocity[3];
 			flVelocity[0] = GetRandomFloat(0.0, 350.0);

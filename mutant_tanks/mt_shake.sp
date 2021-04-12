@@ -1,6 +1,6 @@
 /**
  * Mutant Tanks: a L4D/L4D2 SourceMod Plugin
- * Copyright (C) 2020  Alfred "Crasher_3637/Psyk0tik" Llagas
+ * Copyright (C) 2021  Alfred "Crasher_3637/Psyk0tik" Llagas
  *
  * This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
  *
@@ -25,15 +25,20 @@ public Plugin myinfo =
 	url = MT_URL
 };
 
-bool g_bLateLoad;
+bool g_bLateLoad, g_bSecondGame;
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
-	if (!bIsValidGame(false) && !bIsValidGame())
+	switch (GetEngineVersion())
 	{
-		strcopy(error, err_max, "\"[MT] Shake Ability\" only supports Left 4 Dead 1 & 2.");
+		case Engine_Left4Dead: g_bSecondGame = false;
+		case Engine_Left4Dead2: g_bSecondGame = true;
+		default:
+		{
+			strcopy(error, err_max, "\"[MT] Shake Ability\" only supports Left 4 Dead 1 & 2.");
 
-		return APLRes_SilentFailure;
+			return APLRes_SilentFailure;
+		}
 	}
 
 	g_bLateLoad = late;
@@ -146,6 +151,7 @@ public void OnPluginStart()
 {
 	LoadTranslations("common.phrases");
 	LoadTranslations("mutant_tanks.phrases");
+	LoadTranslations("mutant_tanks_names.phrases");
 
 	RegConsoleCmd("sm_mt_shake", cmdShakeInfo, "View information about the Shake ability.");
 
@@ -165,7 +171,7 @@ public void OnPluginStart()
 
 public void OnMapStart()
 {
-	PrecacheSound((bIsValidGame() ? SOUND_SMASH2 : SOUND_SMASH1), true);
+	PrecacheSound((g_bSecondGame ? SOUND_SMASH2 : SOUND_SMASH1), true);
 
 	vReset();
 }
@@ -304,7 +310,7 @@ public void MT_OnMenuItemDisplayed(int client, const char[] info, char[] buffer,
 
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if (MT_IsCorePluginEnabled() && bIsValidClient(victim, MT_CHECK_INDEX|MT_CHECK_INGAME|MT_CHECK_ALIVE) && bIsValidEntity(inflictor) && damage >= 0.5)
+	if (MT_IsCorePluginEnabled() && bIsValidClient(victim, MT_CHECK_INDEX|MT_CHECK_INGAME|MT_CHECK_ALIVE) && bIsValidEntity(inflictor) && damage > 0.0)
 	{
 		static char sClassname[32];
 		GetEntityClassname(inflictor, sClassname, sizeof(sClassname));
@@ -339,7 +345,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 
 public void MT_OnPluginCheck(ArrayList &list)
 {
-	char sName[32];
+	char sName[128];
 	GetPluginFilename(null, sName, sizeof(sName));
 	list.PushString(sName);
 }
@@ -352,7 +358,7 @@ public void MT_OnAbilityCheck(ArrayList &list, ArrayList &list2, ArrayList &list
 	list4.PushString(MT_CONFIG_SECTION4);
 }
 
-public void MT_OnCombineAbilities(int tank, int type, float random, const char[] combo, int survivor, int weapon, const char[] classname)
+public void MT_OnCombineAbilities(int tank, int type, const float random, const char[] combo, int survivor, int weapon, const char[] classname)
 {
 	if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility != 2)
 	{
@@ -576,7 +582,7 @@ public void MT_OnConfigsLoaded(const char[] subsection, const char[] key, const 
 
 public void MT_OnSettingsCached(int tank, bool apply, int type)
 {
-	bool bHuman = MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT);
+	bool bHuman = bIsTank(tank, MT_CHECK_FAKECLIENT);
 	g_esCache[tank].g_flShakeChance = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flShakeChance, g_esAbility[type].g_flShakeChance);
 	g_esCache[tank].g_flShakeDeathChance = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flShakeDeathChance, g_esAbility[type].g_flShakeDeathChance);
 	g_esCache[tank].g_flShakeDeathRange = flGetSettingValue(apply, bHuman, g_esPlayer[tank].g_flShakeDeathRange, g_esAbility[type].g_flShakeDeathRange);
@@ -653,7 +659,7 @@ public void MT_OnAbilityActivated(int tank)
 		return;
 	}
 
-	if (MT_IsTankSupported(tank) && (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iShakeAbility == 1 && g_esCache[tank].g_iComboAbility == 0)
+	if (MT_IsTankSupported(tank) && (!bIsTank(tank, MT_CHECK_FAKECLIENT) || g_esCache[tank].g_iHumanAbility != 1) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iShakeAbility == 1 && g_esCache[tank].g_iComboAbility == 0)
 	{
 		vShakeAbility(tank, GetRandomFloat(0.1, 100.0));
 	}
@@ -756,7 +762,7 @@ static void vShakeAbility(int tank, float random, int pos = -1)
 		return;
 	}
 
-	if (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
+	if (!bIsTank(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
 	{
 		g_esPlayer[tank].g_bFailed = false;
 		g_esPlayer[tank].g_bNoAmmo = false;
@@ -783,13 +789,13 @@ static void vShakeAbility(int tank, float random, int pos = -1)
 
 		if (iSurvivorCount == 0)
 		{
-			if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+			if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 			{
 				MT_PrintToChat(tank, "%s %t", MT_TAG3, "ShakeHuman4");
 			}
 		}
 	}
-	else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
+	else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1)
 	{
 		MT_PrintToChat(tank, "%s %t", MT_TAG3, "ShakeAmmo");
 	}
@@ -804,7 +810,7 @@ static void vShakeHit(int survivor, int tank, float random, float chance, int en
 
 	if (enabled == 1 && bIsSurvivor(survivor))
 	{
-		if (!MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
+		if (!bIsTank(tank, MT_CHECK_FAKECLIENT) || (g_esPlayer[tank].g_iAmmoCount < g_esCache[tank].g_iHumanAmmo && g_esCache[tank].g_iHumanAmmo > 0))
 		{
 			static int iTime;
 			iTime = GetTime();
@@ -813,7 +819,7 @@ static void vShakeHit(int survivor, int tank, float random, float chance, int en
 				g_esPlayer[survivor].g_bAffected = true;
 				g_esPlayer[survivor].g_iOwner = tank;
 
-				if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && (flags & MT_ATTACK_RANGE) && (g_esPlayer[tank].g_iCooldown == -1 || g_esPlayer[tank].g_iCooldown < iTime))
+				if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && (flags & MT_ATTACK_RANGE) && (g_esPlayer[tank].g_iCooldown == -1 || g_esPlayer[tank].g_iCooldown < iTime))
 				{
 					g_esPlayer[tank].g_iAmmoCount++;
 
@@ -836,10 +842,10 @@ static void vShakeHit(int survivor, int tank, float random, float chance, int en
 				dpShake.WriteCell(messages);
 				dpShake.WriteCell(enabled);
 				dpShake.WriteCell(pos);
-				dpShake.WriteCell(GetTime());
+				dpShake.WriteCell(iTime);
 
 				vEffect(survivor, tank, g_esCache[tank].g_iShakeEffect, flags);
-				EmitSoundToClient(survivor, (bIsValidGame() ? SOUND_SMASH2 : SOUND_SMASH1));
+				EmitSoundToClient(survivor, (g_bSecondGame ? SOUND_SMASH2 : SOUND_SMASH1));
 
 				if (g_esCache[tank].g_iShakeMessage & messages)
 				{
@@ -851,7 +857,7 @@ static void vShakeHit(int survivor, int tank, float random, float chance, int en
 			}
 			else if ((flags & MT_ATTACK_RANGE) && (g_esPlayer[tank].g_iCooldown == -1 || g_esPlayer[tank].g_iCooldown < iTime))
 			{
-				if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bFailed)
+				if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bFailed)
 				{
 					g_esPlayer[tank].g_bFailed = true;
 
@@ -859,7 +865,7 @@ static void vShakeHit(int survivor, int tank, float random, float chance, int en
 				}
 			}
 		}
-		else if (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bNoAmmo)
+		else if (bIsTank(tank, MT_CHECK_FAKECLIENT) && g_esCache[tank].g_iHumanAbility == 1 && !g_esPlayer[tank].g_bNoAmmo)
 		{
 			g_esPlayer[tank].g_bNoAmmo = true;
 
@@ -874,7 +880,7 @@ static void vShakeRange(int tank, int value, float random, int pos = -1)
 	flChance = (pos != -1) ? MT_GetCombinationSetting(tank, 11, pos) : g_esCache[tank].g_flShakeDeathChance;
 	if (MT_IsTankSupported(tank, MT_CHECK_INDEX|MT_CHECK_INGAME) && MT_IsCustomTankSupported(tank) && g_esCache[tank].g_iShakeDeath == 1 && random <= flChance)
 	{
-		if (g_esCache[tank].g_iComboAbility == value || bIsAreaNarrow(tank, g_esCache[tank].g_flOpenAreasOnly) || MT_DoesTypeRequireHumans(g_esPlayer[tank].g_iTankType) || (g_esCache[tank].g_iRequiresHumans > 0 && iGetHumanCount() < g_esCache[tank].g_iRequiresHumans) || (MT_IsTankSupported(tank, MT_CHECK_FAKECLIENT) && ((!MT_HasAdminAccess(tank) && !bHasAdminAccess(tank, g_esAbility[g_esPlayer[tank].g_iTankType].g_iAccessFlags, g_esPlayer[tank].g_iAccessFlags)) || g_esCache[tank].g_iHumanAbility == 0)))
+		if (g_esCache[tank].g_iComboAbility == value || bIsAreaNarrow(tank, g_esCache[tank].g_flOpenAreasOnly) || MT_DoesTypeRequireHumans(g_esPlayer[tank].g_iTankType) || (g_esCache[tank].g_iRequiresHumans > 0 && iGetHumanCount() < g_esCache[tank].g_iRequiresHumans) || (bIsTank(tank, MT_CHECK_FAKECLIENT) && ((!MT_HasAdminAccess(tank) && !bHasAdminAccess(tank, g_esAbility[g_esPlayer[tank].g_iTankType].g_iAccessFlags, g_esPlayer[tank].g_iAccessFlags)) || g_esCache[tank].g_iHumanAbility == 0)))
 		{
 			return;
 		}
