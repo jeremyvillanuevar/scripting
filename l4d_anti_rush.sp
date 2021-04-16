@@ -20,6 +20,7 @@
 
 #define PLUGIN_VERSION 		"1.10"
 #define DEBUG_BENCHMARK		0			// 0=Off. 1=Benchmark logic function.
+#define	DEBUG				0
 
 /*======================================================================================
 	Plugin Info:
@@ -564,8 +565,7 @@ public Action Event_PlayerTeam(Event event, const char[] name, bool dontBroadcas
 	}
 }
 
-// This event serves to make sure the bots spawn at the start of the finale event. The director disallows spawning until the survivors have started the event, so this was
-// definitely needed.
+// This event serves AR disables at the start of the finale event.
 public Action evtFinaleStart(Event event, const char[] name, bool dontBroadcast) 
 {
 	LogMessage("[AR] Finale Started");
@@ -660,6 +660,9 @@ void ResetSlowdown()
 // ====================================================================================================
 public Action TimerTest(Handle timer)
 {
+	#if DEBUG
+	PrintToChatAll("\x03[AR]\x04 TimerTest");
+	#endif
 	if( !g_bMapStarted ) return Plugin_Continue;
 	if (FinaleStarted) RequestFrame(OnNextFrame);
 	#if DEBUG_BENCHMARK
@@ -684,11 +687,13 @@ public Action TimerTest(Handle timer)
 	}
 
 	float flow;
-	int clientflowNear;
-	int clientflowFirst;		
+	int clientflowidRusher;
+	int clientflowposRusher;		
 	int count, countflow, index;
-	countflow=0;
 	count=0;
+	
+	
+	countflow=0;
 		  
 	// Get survivors flow distance
 	ArrayList aList = new ArrayList(2);
@@ -707,26 +712,42 @@ public Action TimerTest(Handle timer)
 
 			if( g_iCvarIncap )
 			{
-				if( GetEntProp(i, Prop_Send, "m_isIncapacitated", 1) )
-					incapped++;
+				if (!IsFakeClient(i))
+					if( GetEntProp(i, Prop_Send, "m_isIncapacitated", 1) )
+						incapped++;
 			}
 		}
 	}
+	#if DEBUG
+	PrintToChatAll("\x03[AR]\x04 incapped %d",incapped);
+	#endif
 
 	for( int i = 0; i < count; i++ )
 	{
 		client = clients[i];
 
-		// Ignore incapped
-		if( g_iCvarIncap && incapped >= g_iCvarIncap && GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) )
-						  
-			continue;
-			
+		
+		#if DEBUG
+		PrintToChatAll("\x03[AR]\x04 clients[i] %N %d",clients[i],clients[i]);
+		#endif
+		
+		#if DEBUG
+		PrintToChatAll("\x03[AR]\x04 flow %f",flow);
+		#endif
 		// Ignore bot
 		if(IsFakeClient(client))
 			continue;
+			
+		// Ignore incapped
+		if( g_iCvarIncap && incapped >= g_iCvarIncap)
+			if (!IsFakeClient(client))
+				if (GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) )						  
+					continue;
 
 		flow = L4D2Direct_GetFlowDistance(client);
+		#if DEBUG
+		PrintToChatAll("\x03[AR]\x04 flow %f",flow);
+		#endif
 		if( flow && flow != -9999.0 ) // Invalid flows
 		{
 			countflow++;
@@ -740,13 +761,62 @@ public Action TimerTest(Handle timer)
 			SDKUnhook(client, SDKHook_PreThinkPost, PreThinkPost);
 		}
 	}
+	#if DEBUG
+	PrintToChatAll("\x03[AR]\x04 countflow %d",countflow);
+	#endif
 
 	// Incase not enough players or some have invalid flow distance, we still need an average.
 	if( countflow >= g_iCvarPlayers )
 	{
 		aList.Sort(Sort_Descending, Sort_Float);
+/*
+		for (int i = 0; i < countflow-1; i++ )
+		{	
+			float tempflow;
+			float tempflowi=aList.Get(i, 0);
+			float tempflowii=aList.Get(i+1, 0);
+			int tempclient;
+			int tempclienti=aList.Get(i, 1);
+			int tempclientii=aList.Get(i+1, 1);
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04tempclienti %d",tempclienti);
+				#endif
+			if(tempflowi<tempflowii)
+			{
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04 tempflowi<tempflowii");
+				#endif
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04 tempflowi %f",tempflowi);
+				#endif
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04 tempflowii %f",tempflowii);
+				#endif
+				tempflow=tempflowi;
+				tempclient=tempclienti;
+				aList.Set(i,tempflowii,0);
+				aList.Set(i,tempclientii, 1);
+				aList.Set(i+1,tempflow, 0);//flowlist[i+1]=temp1
+				aList.Set(i+1,tempclient, 1);//survivorlist[i+1]=temp2
+				tempflowi=aList.Get(i, 0);
+				tempflowii=aList.Get(i+1, 0);
+				tempclienti=aList.Get(i, 1);
+				tempclientii=aList.Get(i+1, 1);
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04 tempflowi=aList.Get(i, 0) %f",tempflowi);
+				#endif
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04 tempclienti=aList.Get(i, 1) %d",tempclienti);
+				#endif
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04tempclienti %d",tempclienti);
+				#endif
+			}
+		}
+*/
 
-		int clientflowAvg;
+		int clientAvg,lastClient;
+		int clientAvgpos,lastClientpos;
 					 
 		float lastFlow;
 		float distance;
@@ -756,27 +826,49 @@ public Action TimerTest(Handle timer)
 		// Detect rushers
 		if( g_fCvarRangeLead )
 		{
+			#if DEBUG
+			PrintToChatAll("\x03[AR]\x04 g_fCvarRangeLead");
+			#endif
 			// Loop through survivors from highest flow
 			for( int i = 0; i < countflow; i++ )//8jugadores i 0 al 7
 			{
 				client = aList.Get(i, 1);
 				bool flowBack = true;
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04 client i %d = %N %d",i,client,client);
+				#endif
 
 				// Only check nearest half of survivor pack.
 				if( i < countflow / 2 )//8jugadores i 0 al 3
 				{
 					flow = aList.Get(i, 0);
+					#if DEBUG
+					PrintToChatAll("\x03[AR]\x04 client i %d = flow %f",i,flow);
+					#endif
 
 					// Loop through from next survivor to mid-way through the pack.
 					for( int x = i + 1; x <= countflow / 2; x++ )//8jugadores i 0 x 1 al 4, i 1 x 2 al 4, i 2 x 3 al 4, i 3 x 4 al 4
 					{
+						lastClient = aList.Get(x, 1);
+						#if DEBUG
+						PrintToChatAll("\x03[AR]\x04 client x %d = %N %d",x,lastClient,lastClient);
+						#endif
 						lastFlow = aList.Get(x, 0);
+						#if DEBUG
+						PrintToChatAll("\x03[AR]\x04 client x %d = lastFlow %f",x,lastFlow);
+						#endif
 						distance = flow - lastFlow;
+						#if DEBUG
+						PrintToChatAll("\x03[AR]\x04 distance %f",distance);
+						#endif
 						if( g_bEventStarted ) distance -= g_fEventExtended;
 
 						// Warn ahead hint
 						if( g_iCvarText && g_fCvarWarnTime && g_fCvarWarnLead && distance > g_fCvarWarnLead && distance < g_fCvarRangeLead && g_fHintWarn[client] < GetGameTime() )
 						{
+							#if DEBUG
+							PrintToChatAll("\x03[AR]\x04 Warn ahead hint");
+							#endif
 							g_fHintWarn[client] = GetGameTime() + g_fCvarWarnTime;
 
 							if( g_iCvarType == 1 )
@@ -788,12 +880,18 @@ public Action TimerTest(Handle timer)
 						// Compare higher flow with next survivor, they're rushing
 						if( distance > g_fCvarRangeLead )
 						{
-							// PrintToServer("RUSH: %N %f", client, distance);
+							#if DEBUG
+							PrintToChatAll("\x03[AR]\x04 distance > g_fCvarRangeLead");
+							PrintToChatAll("RUSH: %N %f", client, distance);
+							#endif
 							flowBack = false;
 
 							// Slowdown enabled?
 							if( g_iCvarType == 1 )
 							{
+								#if DEBUG
+								PrintToChatAll("\x03[AR]\x04 Slowdown");
+								#endif
 								// Inhibit moving forward
 								// Only check > or < because when == the same flow distance, they're either already being slowed or running back, so we don't want to change/affect them within the same flow NavMesh.
 								if( flow > g_fLastFlow[client] )
@@ -820,17 +918,30 @@ public Action TimerTest(Handle timer)
 									g_fLastFlow[client] = flow;
 								}
 							}
-
-
-
 							// Teleport enabled?
 							if( g_iCvarType == 2)// &&  IsClientPinned(client) == false )
-							{
-								clientflowNear = aList.Get(1, 1);
-								//clientAvg = aList.Get(x, 1);										  
+							{						
+								#if DEBUG
+								PrintToChatAll("\x03[AR]\x04 teleportedahead");
+								#endif
+								clientflowidRusher = client;
+								clientflowposRusher = i;
+								#if DEBUG
+								PrintToChatAll("\x03[AR]\x04 clientflowidRusher i %d : %N %d",clientflowposRusher,clientflowidRusher,clientflowidRusher);
+								#endif
+								#if DEBUG
+								PrintToChatAll("\x03[AR]\x04 clientflowidRusher i %d : flow %f",clientflowposRusher,aList.Get(clientflowposRusher, 0));
+								#endif
+								clientAvg = aList.Get(x, 1);
+								clientAvgpos = x;
 								float vPos[3];
-								GetClientAbsOrigin(clientflowNear, vPos);
-								//GetClientAbsOrigin(clientAvg, vPos);
+								GetClientAbsOrigin(clientAvg, vPos);
+								#if DEBUG
+								PrintToChatAll("\x03[AR]\x04 TP to clientAvg x %d: %N %d",clientAvgpos,clientAvg,clientAvg);
+								#endif
+								#if DEBUG
+								PrintToChatAll("\x03[AR]\x04 TP to clientAvg x %d flow %f",clientAvgpos,aList.Get(x, 0));
+								#endif
 
 								// Hint
 								if( g_iCvarText)
@@ -843,6 +954,18 @@ public Action TimerTest(Handle timer)
 								Format(rawmsg, sizeof(rawmsg), "%T", "Friend_comeback", client,PlayerName);
 								CPrintToChatAll("%s",rawmsg);
 								TeleportEntity(client, vPos, NULL_VECTOR, NULL_VECTOR);
+								aList.Set(clientflowposRusher,aList.Get(clientAvgpos, 0),0);//tempflowii,0);
+								if (i==0 && x==2)
+								{
+									TeleportEntity(aList.Get(i+1, 1), vPos, NULL_VECTOR, NULL_VECTOR);	
+									aList.Set(i+1,aList.Get(clientAvgpos, 0),0);//tempflowii,0);
+									#if DEBUG
+									PrintToChatAll("\x03[AR]\x04 2nd %d: %N %d",i+1,aList.Get(i+1, 1),aList.Get(i+1, 1));
+									#endif								
+									#if DEBUG
+									PrintToChatAll("\x03[AR]\x04 TP 2nd %d to clientAvg: %N %d",i+1,clientAvg,clientAvg);
+									#endif								
+								}
 								teleportedahead =true;							  
 							}
 
@@ -859,74 +982,45 @@ public Action TimerTest(Handle timer)
 				}
 			}
 		}
-	}
-	else
-	{
-		ResetSlowdown();
-	}
-
-
-
-	aList.Clear();
-
-	countflow=0;
-	count=0;
-	
-	for( int i = 0; i < count; i++ )
-	{
-		client = clients[i];
-
-		// Ignore incapped
-		if( g_iCvarIncap && incapped >= g_iCvarIncap && GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) )
-						  
-			continue;
-			
-		// Ignore bot
-		if(IsFakeClient(client))
-			continue;
-
-		flow = L4D2Direct_GetFlowDistance(client);
-		if( flow && flow != -9999.0 ) // Invalid flows
-		{
-			countflow++;
-			index = aList.Push(flow);
-			aList.Set(index, client, 1);
-		}
-		// Reset slowdown if players flow is invalid
-		else if( g_bInhibit[client] == true )
-		{
-			g_bInhibit[client] = false;
-			SDKUnhook(client, SDKHook_PreThinkPost, PreThinkPost);
-		}
-	}
-
-
-
-	// Incase not enough players or some have invalid flow distance, we still need an average.
-	if( countflow >= g_iCvarPlayers )
-	{
-		aList.Sort(Sort_Descending, Sort_Float);
-
-		int clientflowAvg;
-					 
-		float lastFlow;
-		float distance;
-
-		// Teleport slacker
 		if( g_fCvarRangeLast )
 		{
+			#if DEBUG
+			PrintToChatAll("\x03[AR]\x04 g_fCvarRangeLast");
+			#endif
 			// Loop through survivors from lowest flow to mid-way through the pack.
 			for( int i = countflow - 1; i > countflow / 2; i-- )//8 jugadores i 7 al 5//9 j i 8 al 5
 			{
 				flow = aList.Get(i, 0);
 				client = aList.Get(i, 1);
 
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04 client i %d = %N %d",i,client,client);
+				#endif
+				
+				#if DEBUG
+				PrintToChatAll("\x03[AR]\x04 client i flow %f",flow);
+				#endif
+				
 				// Loop through from next survivor to mid-way through the pack.
 				for( int x = i - 1; x < countflow; x++ )//8jugadores i 7 x 6 al 7, i 6 x 5 al 7, i 5 x 4 al 7//9j i 8 x 7 al 8
 				{
 					lastFlow = aList.Get(x, 0);
+						
+					clientAvg = aList.Get(x, 1);
+					clientAvgpos = x;
+					#if DEBUG
+					PrintToChatAll("\x03[AR]\x04 clientAvg x %d : %N %d",x,clientAvg, clientAvg);
+					#endif
+					
+					#if DEBUG
+					PrintToChatAll("\x03[AR]\x04 clientflowAvg x %d : lastFlow %f",x,lastFlow);
+					#endif
 					distance = lastFlow - flow;
 					if( g_bEventStarted ) distance -= g_fEventExtended;
+					
+					#if DEBUG
+					PrintToChatAll("\x03[AR]\x04 distance %f",distance);
+					#endif
 
 					// Warn behind hint
 					if( g_iCvarText && g_fCvarWarnTime && g_fCvarWarnLast && distance > g_fCvarWarnLast && distance < g_fCvarRangeLead && g_fHintWarn[client] < GetGameTime() )
@@ -936,19 +1030,42 @@ public Action TimerTest(Handle timer)
 						ClientHintMessage(client, "Warn_Behind");
 					}
 
-					// Compare lower flow with next survivor, they're behind
+					// teleportedahead or they're behind
 					if( (distance > g_fCvarRangeLast) || teleportedahead)// && IsClientPinned(client) == false )
 					{
-						clientflowFirst = aList.Get(0, 1);
-						// PrintToServer("SLOW: %N %f", client, distance);
-						clientflowAvg = aList.Get(x, 1);//clientAvg = aList.Get(x, 1);
+						#if DEBUG
+						PrintToChatAll("SLOW: %N %f", client, distance);
+						#endif			
+						int posTel;
 						float vPos[3];
 						if (teleportedahead)
-							GetClientAbsOrigin(clientflowNear, vPos);
+						{
+							#if DEBUG
+							PrintToChatAll("\x03[AR]\x04 teleportedahead");
+							#endif
+							int nexttoRusher = aList.Get(0,1);//clientflowposRusher+1, 1);
+							GetClientAbsOrigin(nexttoRusher, vPos);
+							posTel=clientflowposRusher+1;
+							#if DEBUG
+							PrintToChatAll("\x03[AR]\x04 TP to next to clientflowidRusher pos %d: %N %d",posTel,nexttoRusher,nexttoRusher);
+							#endif
+						}
 						else
+						// Compare lower flow with next survivor, they're behind
 						if (distance > g_fCvarRangeLast)
-							GetClientAbsOrigin(clientflowAvg, vPos);//GetClientAbsOrigin(clientAvg, vPos);
-
+						{			
+							#if DEBUG
+							PrintToChatAll("\x03[AR]\x04 distance > g_fCvarRangeLast");
+							#endif
+							clientflowposRusher=0;
+							clientflowidRusher= aList.Get(clientflowposRusher, 1);
+							GetClientAbsOrigin(clientflowidRusher, vPos);
+							posTel=clientflowposRusher;
+							//GetClientAbsOrigin(clientAvg, vPos);
+							#if DEBUG
+							PrintToChatAll("\x03[AR]\x04 TP to next to clientflowidRusher pos %d: %N %d",posTel,clientflowidRusher,clientflowidRusher);
+							#endif
+						}
 						// Hint
 						if( g_iCvarText )
 						{
@@ -956,6 +1073,7 @@ public Action TimerTest(Handle timer)
 						}
 
 						TeleportEntity(client, vPos, NULL_VECTOR, NULL_VECTOR);
+						aList.Set(i,aList.Get(posTel, 0),0);//tempflowii,0);
 						break;
 					}
 				}

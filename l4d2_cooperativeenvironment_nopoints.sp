@@ -11,7 +11,7 @@
 //1.0.4 - Optimization
 //1.0.5 - Optimization
 //1.0.6 - Finale
-#define		DEBUG	1
+#define	DEBUG	1
 
 //Handle SetKills;
 ConVar g_hCvarCoopEnvEnable;
