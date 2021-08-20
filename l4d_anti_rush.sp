@@ -108,7 +108,7 @@ float g_fBenchAvg;
 float g_iBenchTicks;
 #endif
 
-#define CVAR_FLAGS			FCVAR_NOTIFY
+#define CVAR_FLAGS			FCVAR_DONTRECORD
 #define MINIMUM_RANGE		1500.0			// Minimum range for last and lead cvars.
 #define MINIMUM_WARN		1000.0			// Minimum range for warn cvars.
 #define MAX_COMMAND_LENGTH 512
@@ -920,7 +920,7 @@ public Action TimerTest(Handle timer)
 							}
 							// Teleport enabled?
 							if( g_iCvarType == 2)// &&  IsClientPinned(client) == false )
-							{						
+							{				
 								#if DEBUG
 								PrintToChatAll("\x03[AR]\x04 teleportedahead");
 								#endif
@@ -957,8 +957,13 @@ public Action TimerTest(Handle timer)
 								aList.Set(clientflowposRusher,aList.Get(clientAvgpos, 0),0);//tempflowii,0);
 								if (i==0 && x==2)
 								{
+									// Hint
+									if( g_iCvarText)
+									{
+										ClientHintMessage(aList.Get(i+1, 1), "Rush_Ahead");
+									}
 									TeleportEntity(aList.Get(i+1, 1), vPos, NULL_VECTOR, NULL_VECTOR);	
-									aList.Set(i+1,aList.Get(clientAvgpos, 0),0);//tempflowii,0);
+									aList.Set(i+1,aList.Get(clientAvgpos, 0),0);//tempflowii,0);									
 									#if DEBUG
 									PrintToChatAll("\x03[AR]\x04 2nd %d: %N %d",i+1,aList.Get(i+1, 1),aList.Get(i+1, 1));
 									#endif								
@@ -1008,19 +1013,13 @@ public Action TimerTest(Handle timer)
 						
 					clientAvg = aList.Get(x, 1);
 					clientAvgpos = x;
+					distance = lastFlow - flow;
 					#if DEBUG
 					PrintToChatAll("\x03[AR]\x04 clientAvg x %d : %N %d",x,clientAvg, clientAvg);
-					#endif
-					
-					#if DEBUG
 					PrintToChatAll("\x03[AR]\x04 clientflowAvg x %d : lastFlow %f",x,lastFlow);
-					#endif
-					distance = lastFlow - flow;
-					if( g_bEventStarted ) distance -= g_fEventExtended;
-					
-					#if DEBUG
 					PrintToChatAll("\x03[AR]\x04 distance %f",distance);
 					#endif
+					if( g_bEventStarted ) distance -= g_fEventExtended;
 
 					// Warn behind hint
 					if( g_iCvarText && g_fCvarWarnTime && g_fCvarWarnLast && distance > g_fCvarWarnLast && distance < g_fCvarRangeLead && g_fHintWarn[client] < GetGameTime() )

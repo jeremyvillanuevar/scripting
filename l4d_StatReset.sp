@@ -6,7 +6,7 @@
 
 #define CVAR_FLAGS		FCVAR_NOTIFY
 
-#define PLUGIN_VERSION "3.0"
+#define PLUGIN_VERSION "3.1"
 
 public Plugin myinfo = 
 {
@@ -29,6 +29,10 @@ public Plugin myinfo =
 	3.0 (27-Mar-2021)
 	 - New release, based on direct sdk call to CTerrorPlayer::ResetCheckpointStats
 	 
+	3.1 (17-Apr-2021)
+	 - Changed default value of "l4d_stat_reset_team" ConVar to handle !afk players. Updated description.
+	 * Players who already installed the plugin must do it manually via /cfg/sourcemod/l4d_stat_reset.cfg file!
+	 
 */
 
 #define GAMEDATA		"l4d_stat_reset"
@@ -50,7 +54,7 @@ public void OnPluginStart()
 {
 	CreateConVar(					"l4d_stat_reset_version",		PLUGIN_VERSION,			"Plugin version", FCVAR_DONTRECORD | CVAR_FLAGS );
 	g_hCvarEnable = CreateConVar(	"l4d_stat_reset_enable",		"1",					"Enable plugin (1 - On / 0 - Off)", CVAR_FLAGS );
-	g_hCvarTeamReq = CreateConVar(	"l4d_stat_reset_team",			"4",					"What team should statistics be reset for (4 - Survivors only, 8 - Infected only, 16 - Both)", CVAR_FLAGS );
+	g_hCvarTeamReq = CreateConVar(	"l4d_stat_reset_team",			"6",					"What team should statistics be reset for (2 - Spectators, 4 - Survivors only, 8 - Infected only. You can combine.)", CVAR_FLAGS );
 	
 	AutoExecConfig(true,			"l4d_stat_reset");
 	

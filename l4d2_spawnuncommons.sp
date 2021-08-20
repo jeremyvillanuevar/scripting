@@ -58,13 +58,13 @@ static UncommonData[Uncommons][UncommonInfo];
 
 public OnPluginStart()
 {
-	CreateConVar("l4d2_spawn_uncommons_version", PLUGIN_VERSION, "L4D2 Spawn Uncommons Version", FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_DONTRECORD | FCVAR_NOTIFY);
+	CreateConVar("l4d2_spawn_uncommons_version", PLUGIN_VERSION, "L4D2 Spawn Uncommons Version", FCVAR_SPONLY | FCVAR_DONTRECORD | FCVAR_NOTIFY);
 	
-	HordeAmountCVAR = 		CreateConVar("l4d2_spawn_uncommons_hordecount", "25", "How many Zombies do you mean by 'horde'", FCVAR_PLUGIN | FCVAR_NOTIFY);
-	RandomizeUCI = 			CreateConVar("l4d2_spawn_uncommons_autoshuffle", "1", "Do you want all Uncommons randomly spawning on all maps", FCVAR_PLUGIN | FCVAR_NOTIFY);
-	RandomizeUCIChance =	CreateConVar("l4d2_spawn_uncommons_autochance", "15", "Every 'THIS' zombie spawning will be statistically turned uncommon if autoshuffle is active", FCVAR_PLUGIN | FCVAR_NOTIFY);
-	AllowedUCIFlags =		CreateConVar("l4d2_spawn_uncommons_autotypes", "19", "binary flag of allowed autoshuffle zombies. 1 = riot, 2 = ceda, 4 = clown, 8 = mudman, 16 = roadcrew, 32 = jimmy, 64 = fallen", FCVAR_PLUGIN | FCVAR_NOTIFY);
-	UCIHealthOverride =		CreateConVar("l4d2_spawn_uncommons_healthoverride", "-1", "Health value the uncommons get set to. '-1' is default values", FCVAR_PLUGIN | FCVAR_NOTIFY);
+	HordeAmountCVAR = 		CreateConVar("l4d2_spawn_uncommons_hordecount", "25", "How many Zombies do you mean by 'horde'", FCVAR_DONTRECORD);
+	RandomizeUCI = 			CreateConVar("l4d2_spawn_uncommons_autoshuffle", "1", "Do you want all Uncommons randomly spawning on all maps", FCVAR_DONTRECORD);
+	RandomizeUCIChance =	CreateConVar("l4d2_spawn_uncommons_autochance", "15", "Every 'THIS' zombie spawning will be statistically turned uncommon if autoshuffle is active", FCVAR_DONTRECORD);
+	AllowedUCIFlags =		CreateConVar("l4d2_spawn_uncommons_autotypes", "19", "binary flag of allowed autoshuffle zombies. 1 = riot, 2 = ceda, 4 = clown, 8 = mudman, 16 = roadcrew, 32 = jimmy, 64 = fallen", FCVAR_DONTRECORD);
+	UCIHealthOverride =		CreateConVar("l4d2_spawn_uncommons_healthoverride", "-1", "Health value the uncommons get set to. '-1' is default values", FCVAR_DONTRECORD);
 	
 	RegAdminCmd("sm_spawnuncommon", Command_Uncommon, ADMFLAG_CHEATS, "Spawn uncommon infected, ANYTIME");
 	RegAdminCmd("sm_spawnuncommonhorde", Command_UncommonHorde, ADMFLAG_CHEATS, "Spawn an uncommon infected horde, ANYTIME");

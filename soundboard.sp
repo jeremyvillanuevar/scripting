@@ -217,16 +217,11 @@ public void OnPluginStart()
 	PrecacheSound("npc\\churchguy\\radiobutton1extended28.wav");
 	PrecacheSound("player\\survivor\\voice\\namvet\\c6dlc3movieline10.wav");
 	PrecacheSound("common\\bugreporter_failed.wav");
-	PrecacheSound("player\\survivor\\voice\\namvet\\c6dlc3movieline05.wav");
-	
+	PrecacheSound("player\\survivor\\voice\\namvet\\c6dlc3movieline05.wav");	
 	PrecacheSound("player\\survivor\\voice\\teengirl\\warnwitch02.wav");
-	PrecacheSound("player\\survivor\\voice\\teengirl\\nicejob58.wav");
+	PrecacheSound("player\\survivor\\voice\\teengirl\\scenariojoin02.wav");
 	PrecacheSound("player\\survivor\\voice\\teengirl\\help15.wav");
 	PrecacheSound("player\\survivor\\voice\\teengirl\\warntank01.wav");
-
-
-
-
 }
 
 
@@ -421,7 +416,7 @@ public Action Cmd_hello(int client,int args)
 	PrintToChatAll("******************************************************");
 	PrintToChatAll("HELLO = HOLA");
 	PrintToChatAll("******************************************************");
-	Command_Play("player\\survivor\\voice\\teengirl\\nicejob58.wav");
+	Command_Play("player\\survivor\\voice\\teengirl\\scenariojoin02.wav");
 	return Plugin_Handled;
 }
 
